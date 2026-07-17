@@ -6,7 +6,12 @@ const Product = require("../models/Product");
 router.get("/get-all-product", async (req, res) => {
   try {
     const products = await Product.find({});
-    res.status(200).json(products);
+    res.status(200).json({
+      code: 200,
+      message: "Lấy danh sách sản phẩm thành công",
+      data: products
+    });
+
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
