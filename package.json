@@ -7,14 +7,17 @@
     "dev": "nodemon ./bin/www"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cookie-parser": "~1.4.4",
     "debug": "~2.6.9",
     "dotenv": "^17.4.2",
     "express": "~4.16.1",
     "hbs": "~4.0.4",
     "http-errors": "~1.6.3",
+    "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.7.3",
     "morgan": "~1.9.1",
+    "multer": "^2.2.0",
     "nodemon": "^3.0.1"
   }
 }
