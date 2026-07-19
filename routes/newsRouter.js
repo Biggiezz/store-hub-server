@@ -15,12 +15,26 @@ const User = require("../models/users");
  */
 router.get("/get-all-news", async (req, res) => {
   try {
-    // Chỉ truy vấn các bài viết có status là 'published' và sắp xếp mới nhất lên đầu
-    const newsList = await News.find({ status: "published" }).sort({ createdAt: -1 });
+    // Lấy thông số trang hiện tại (page) và giới hạn số bài (limit) từ Query String.
+    // Nếu không truyền, mặc định sẽ là Trang 1 và lấy tối đa 10 bài viết.
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    // Tính số lượng bài viết cần bỏ qua để nhảy tới trang yêu cầu
+    const skip = (page - 1) * limit;
+
+    // Chỉ truy vấn các bài viết có status là 'published', sắp xếp mới nhất lên đầu,
+    // bỏ qua số lượng skip và giới hạn lấy ra số lượng limit bản ghi.
+    const newsList = await News.find({ status: "published" })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
     
     return res.status(200).json({
       code: 200,
-      message: "Lấy danh sách bài viết thành công",
+      message: "Lấy danh sách bài viết phân trang thành công",
+      page: page,
+      limit: limit,
       data: newsList,
     });
   } catch (error) {
@@ -81,12 +95,26 @@ router.get("/get-news-by-id/:id", async (req, res) => {
  */
 router.get("/admin/get-all-news", authenticateToken, authorizeRoles("admin", "superadmin"), async (req, res) => {
   try {
-    // Admin lấy tất cả các bài viết không phân biệt trạng thái, sắp xếp mới nhất lên đầu
-    const allNews = await News.find({}).sort({ createdAt: -1 });
+    // Lấy thông số trang hiện tại (page) và giới hạn số bài (limit) từ Query String.
+    // Nếu không truyền, mặc định sẽ là Trang 1 và lấy tối đa 10 bài viết quản trị.
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    // Tính số lượng bài viết cần bỏ qua để nhảy tới trang yêu cầu
+    const skip = (page - 1) * limit;
+
+    // Admin lấy tất cả các bài viết không phân biệt trạng thái (bao gồm cả draft, hidden), 
+    // sắp xếp mới nhất lên đầu, bỏ qua số lượng skip và giới hạn lấy ra số lượng limit bản ghi.
+    const allNews = await News.find({})
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
     
     return res.status(200).json({
       code: 200,
-      message: "Lấy danh sách bài viết quản trị thành công",
+      message: "Lấy danh sách bài viết quản trị phân trang thành công",
+      page: page,
+      limit: limit,
       data: allNews,
     });
   } catch (error) {
