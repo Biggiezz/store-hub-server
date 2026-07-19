@@ -1,6 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const News = require("../models/News");
+const { authenticateToken, authorizeRoles } = require("../middlewares/auth");
+const User = require("../models/users");
 
 // ==========================================
 // NHÓM API DÀNH CHO KHÁCH HÀNG (CLIENT/ANDROID APP)
@@ -13,12 +15,26 @@ const News = require("../models/News");
  */
 router.get("/get-all-news", async (req, res) => {
   try {
-    // Chỉ truy vấn các bài viết có status là 'published' và sắp xếp mới nhất lên đầu
-    const newsList = await News.find({ status: "published" }).sort({ createdAt: -1 });
+    // Lấy thông số trang hiện tại (page) và giới hạn số bài (limit) từ Query String.
+    // Nếu không truyền, mặc định sẽ là Trang 1 và lấy tối đa 10 bài viết.
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    // Tính số lượng bài viết cần bỏ qua để nhảy tới trang yêu cầu
+    const skip = (page - 1) * limit;
+
+    // Chỉ truy vấn các bài viết có status là 'published', sắp xếp mới nhất lên đầu,
+    // bỏ qua số lượng skip và giới hạn lấy ra số lượng limit bản ghi.
+    const newsList = await News.find({ status: "published" })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
     
     return res.status(200).json({
       code: 200,
-      message: "Lấy danh sách bài viết thành công",
+      message: "Lấy danh sách bài viết phân trang thành công",
+      page: page,
+      limit: limit,
       data: newsList,
     });
   } catch (error) {
@@ -77,14 +93,28 @@ router.get("/get-news-by-id/:id", async (req, res) => {
  * @desc    Lấy toàn bộ danh sách bài viết bao gồm cả nháp và ẩn (Phục vụ trang Admin)
  * @access  Private (Cần bổ sung auth middleware sau này)
  */
-router.get("/admin/get-all-news", async (req, res) => {
+router.get("/admin/get-all-news", authenticateToken, authorizeRoles("admin", "superadmin"), async (req, res) => {
   try {
-    // Admin lấy tất cả các bài viết không phân biệt trạng thái, sắp xếp mới nhất lên đầu
-    const allNews = await News.find({}).sort({ createdAt: -1 });
+    // Lấy thông số trang hiện tại (page) và giới hạn số bài (limit) từ Query String.
+    // Nếu không truyền, mặc định sẽ là Trang 1 và lấy tối đa 10 bài viết quản trị.
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    
+    // Tính số lượng bài viết cần bỏ qua để nhảy tới trang yêu cầu
+    const skip = (page - 1) * limit;
+
+    // Admin lấy tất cả các bài viết không phân biệt trạng thái (bao gồm cả draft, hidden), 
+    // sắp xếp mới nhất lên đầu, bỏ qua số lượng skip và giới hạn lấy ra số lượng limit bản ghi.
+    const allNews = await News.find({})
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
     
     return res.status(200).json({
       code: 200,
-      message: "Lấy danh sách bài viết quản trị thành công",
+      message: "Lấy danh sách bài viết quản trị phân trang thành công",
+      page: page,
+      limit: limit,
       data: allNews,
     });
   } catch (error) {
@@ -101,9 +131,19 @@ router.get("/admin/get-all-news", async (req, res) => {
  * @desc    Tạo một bài viết tin tức mới
  * @access  Private (Cần bổ sung auth middleware sau này)
  */
-router.post("/admin/add-news", async (req, res) => {
+router.post("/admin/add-news", authenticateToken, authorizeRoles("admin", "superadmin"), async (req, res) => {
   try {
-    const { title, content, image, status, author } = req.body;
+    const { title, content, image, status } = req.body;
+
+    // Lấy thông tin User đăng nhập hiện tại từ Database để lấy tên hiển thị
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        code: 404,
+        message: "Không tìm thấy thông tin tài khoản người đăng."
+      });
+    }
+    const authorName = user.name;
 
     // Kiểm tra trùng lặp tiêu đề (không phân biệt hoa thường) HOẶC trùng lặp nội dung bài viết
     const existingNews = await News.findOne({
@@ -130,7 +170,7 @@ router.post("/admin/add-news", async (req, res) => {
       content,
       image,
       status, // Trạng thái bài viết: 'draft' (nháp), 'published' (xuất bản), 'hidden' (ẩn)
-      author,
+      author: authorName, // Gán động tên hiển thị của Admin vừa đăng bài
     });
 
     // Lưu bài viết vào cơ sở dữ liệu
@@ -155,7 +195,7 @@ router.post("/admin/add-news", async (req, res) => {
  * @desc    Cập nhật thông tin hoặc trạng thái (ẩn/hiện) của bài viết
  * @access  Private (Cần bổ sung auth middleware sau này)
  */
-router.put("/admin/update-news/:id", async (req, res) => {
+router.put("/admin/update-news/:id", authenticateToken, authorizeRoles("admin", "superadmin"), async (req, res) => {
   try {
     const { id } = req.params;
     const { title, content, image, status, author } = req.body;
@@ -227,7 +267,7 @@ router.put("/admin/update-news/:id", async (req, res) => {
  * @desc    Xóa vĩnh viễn bài viết khỏi cơ sở dữ liệu
  * @access  Private (Cần bổ sung auth middleware sau này)
  */
-router.delete("/admin/delete-news/:id", async (req, res) => {
+router.delete("/admin/delete-news/:id", authenticateToken, authorizeRoles("admin", "superadmin"), async (req, res) => {
   try {
     const { id } = req.params;
 
