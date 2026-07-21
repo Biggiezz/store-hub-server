@@ -27,6 +27,14 @@ const UserSchema = new mongoose.Schema(
             type: String,
             default: "", // Đường dẫn ảnh đại diện, mặc định để rỗng
         },
+        address: {
+            type: String,
+            default: "", // Địa chỉ cửa hàng
+        },
+        changePasswordDate: {
+            type: Date,
+            default: Date.now, // Ngày đổi mật khẩu gần nhất
+        },
     },
     {
         timestamps: true,
