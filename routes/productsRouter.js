@@ -3,6 +3,7 @@ const router = express.Router();
 const Product = require("../models/Product");
 const Cart = require("../models/Cart");
 const Order = require("../models/Order");
+const upload = require("../middlewares/upload");
 
 const redis = require("redis");
 const client = process.env.REDIS_URL
@@ -26,10 +27,12 @@ router.get("/get-all-product", async (req, res) => {
     const skip = (page - 1) * limit;
 
     // Lấy tổng số lượng sản phẩm để Client biết khi nào hết sản phẩm
-    const totalProducts = await Product.countDocuments({});
+    const category = String(req.query.category || "").trim();
+    const query = category ? { category } : {};
+    const totalProducts = await Product.countDocuments(query);
 
     // Lấy danh sách sản phẩm theo page và limit (sắp xếp mới nhất lên đầu để đảm bảo tính nhất quán khi phân trang)
-    const products = await Product.find({})
+    const products = await Product.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -254,46 +257,77 @@ router.delete("/delete-cart-item/:id", async (req, res) => {
 });
 
 // POST create a new product
-router.post("/add-product", async (req, res) => {
-  try {
-    const {
-      name,
-      price,
-      image,
-      category,
-      description,
-      rating,
-      reviewCount,
-      stock,
-      colors,
-      reviews,
-    } = req.body;
-    const newProduct = new Product({
-      name,
-      price,
-      image,
-      category,
-      description,
-      rating,
-      reviewCount,
-      stock,
-      colors,
-      reviews,
-    });
-    const savedProduct = await newProduct.save();
-    res.status(201).json(savedProduct);
-  } catch (error) {
-    res.status(400).json({ message: error.message });
-  }
-});
+router.post("/add-product", (req, res) =>
+  upload.single("image")(req, res, async (uploadError) => {
+    if (uploadError) {
+      return res.status(400).json({ code: 400, message: uploadError.message, data: null });
+    }
+    try {
+      const { name, price, category, description, stock, colors } = req.body;
+      if (!name || !price || !category || !req.file) {
+        return res.status(400).json({
+          code: 400,
+          message: "Tên, giá, danh mục và hình ảnh là bắt buộc",
+          data: null,
+        });
+      }
+      const image = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+      const parsedColors = colors ? JSON.parse(colors) : [];
+      const savedProduct = await Product.create({
+        name: name.trim(),
+        price: Number(price),
+        image,
+        category: category.trim(),
+        description: description || "",
+        stock: Number(stock) || 0,
+        colors: parsedColors,
+      });
+      res.status(201).json({ code: 201, message: "Thêm sản phẩm thành công", data: savedProduct });
+    } catch (error) {
+      res.status(400).json({ code: 400, message: error.message, data: null });
+    }
+  }),
+);
+
+router.put("/update-product/:id", (req, res) =>
+  upload.single("image")(req, res, async (uploadError) => {
+    if (uploadError) {
+      return res.status(400).json({ code: 400, message: uploadError.message, data: null });
+    }
+    try {
+      const product = await Product.findById(req.params.id);
+      if (!product) {
+        return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm", data: null });
+      }
+      const { name, price, category, description, stock, colors } = req.body;
+      if (!name || !price || !category) {
+        return res.status(400).json({ code: 400, message: "Thiếu thông tin sản phẩm", data: null });
+      }
+      product.name = name.trim();
+      product.price = Number(price);
+      product.category = category.trim();
+      product.description = description || "";
+      product.stock = Number(stock) || 0;
+      if (colors) product.colors = JSON.parse(colors);
+      if (req.file) {
+        product.image = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+      }
+      const updatedProduct = await product.save();
+      res.json({ code: 200, message: "Cập nhật sản phẩm thành công", data: updatedProduct });
+    } catch (error) {
+      res.status(400).json({ code: 400, message: error.message, data: null });
+    }
+  }),
+);
 
 router.get("/search-product", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 6;
     const keyword = req.query.keyword || "";
+    const category = String(req.query.category || "").trim();
     const skip = (page - 1) * limit;
-    const cacheKey = `search:v2:${keyword}:${page}:${limit}`;
+    const cacheKey = `search:v3:${keyword}:${category}:${page}:${limit}`;
 
     // Check cache trước
     const cached = client?.isReady
@@ -303,14 +337,14 @@ router.get("/search-product", async (req, res) => {
       return res.json(JSON.parse(cached));
     }
 
-    const query = keyword
-      ? {
-          name: {
+    const query = {};
+    if (keyword) {
+      query.name = {
             $regex: keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
             $options: "i",
-          },
-        }
-      : {};
+      };
+    }
+    if (category) query.category = category;
 
     const [products, totalProducts] = await Promise.all([
       Product.find(query).skip(skip).limit(limit),
