@@ -29,7 +29,11 @@ const UserSchema = new mongoose.Schema(
         },
         address: {
             type: String,
-            default: "", // Địa chỉ mặc định của người dùng
+            default: "", // Địa chỉ cửa hàng
+        },
+        changePasswordDate: {
+            type: Date,
+            default: Date.now, // Ngày đổi mật khẩu gần nhất
         },
     },
     {

@@ -231,4 +231,109 @@ router.put("/update-avatar", authenticateToken, (req, res) => {
   });
 });
 
+// Cập nhật thông tin cá nhân (name, phone, address) - Không cập nhật email
+router.put("/update-profile", authenticateToken, async (req, res) => {
+  try {
+    const { name, phone, address } = req.body;
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (phone !== undefined) updates.phone = phone;
+    if (address !== undefined) updates.address = address;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user.id,
+      updates,
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        code: 404,
+        message: "Không tìm thấy người dùng."
+      });
+    }
+
+    const userResponse = updatedUser.toObject();
+    delete userResponse.password;
+
+    res.status(200).json({
+      code: 200,
+      message: "Cập nhật thông tin cá nhân thành công",
+      data: userResponse
+    });
+  } catch (error) {
+    res.status(500).json({
+      code: 500,
+      message: "Lỗi máy chủ khi cập nhật thông tin cá nhân.",
+      error: error.message
+    });
+  }
+});
+
+// Đổi mật khẩu (oldPassword, newPassword) - cập nhật changePasswordDate
+router.put("/change-password", authenticateToken, async (req, res) => {
+  try {
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({
+        code: 400,
+        message: "Vui lòng nhập mật khẩu cũ và mật khẩu mới."
+      });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({
+        code: 404,
+        message: "Không tìm thấy người dùng."
+      });
+    }
+
+    // Kiểm tra mật khẩu cũ
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({
+        code: 400,
+        message: "Mật khẩu cũ không chính xác."
+      });
+    }
+
+    // Mã hóa mật khẩu mới
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    user.password = hashedPassword;
+    user.changePasswordDate = new Date();
+    await user.save();
+
+    res.status(200).json({
+      code: 200,
+      message: "Đổi mật khẩu thành công."
+    });
+  } catch (error) {
+    res.status(500).json({
+      code: 500,
+      message: "Lỗi máy chủ khi đổi mật khẩu.",
+      error: error.message
+    });
+  }
+});
+
+// Đăng xuất
+router.post("/logout", authenticateToken, async (req, res) => {
+  try {
+    res.status(200).json({
+      code: 200,
+      message: "Đăng xuất thành công."
+    });
+  } catch (error) {
+    res.status(500).json({
+      code: 500,
+      message: "Lỗi máy chủ khi đăng xuất.",
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
