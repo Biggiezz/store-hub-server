@@ -27,6 +27,10 @@ const UserSchema = new mongoose.Schema(
             type: String,
             default: "", // Đường dẫn ảnh đại diện, mặc định để rỗng
         },
+        address: {
+            type: String,
+            default: "", // Địa chỉ mặc định của người dùng
+        },
     },
     {
         timestamps: true,
