@@ -1,8 +1,11 @@
 const express = require("express");
 const router = express.Router();
+const fs = require("fs");
 const News = require("../models/News");
 const { authenticateToken, authorizeRoles } = require("../middlewares/auth");
 const User = require("../models/users");
+const upload = require("../middlewares/upload");
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // ==========================================
 // NHÓM API DÀNH CHO KHÁCH HÀNG (CLIENT/ANDROID APP)
@@ -90,7 +93,7 @@ router.get("/get-news-by-id/:id", async (req, res) => {
 /**
  * @route   GET /api/newsRouter/admin/get-all-news
  * @desc    Lấy toàn bộ danh sách bài viết bao gồm cả nháp và ẩn (Phục vụ trang Admin)
- * @access  Private (Cần bổ sung auth middleware sau này)
+ * @access  Private (Admin/Superadmin)
  */
 router.get(
   "/admin/get-all-news",
@@ -133,15 +136,31 @@ router.get(
 /**
  * @route   POST /api/newsRouter/admin/add-news
  * @desc    Tạo một bài viết tin tức mới
- * @access  Private (Cần bổ sung auth middleware sau này)
+ * @access  Private (Admin/Superadmin)
  */
 router.post(
   "/admin/add-news",
   authenticateToken,
   authorizeRoles("admin", "superadmin"),
-  async (req, res) => {
+  (req, res) => upload.single("image")(req, res, async (uploadError) => {
+    if (uploadError) {
+      return res.status(400).json({ code: 400, message: uploadError.message });
+    }
+
+    let savedNews;
     try {
-      const { title, content, image, status } = req.body;
+      const { title, content, status } = req.body;
+
+      if (!title?.trim() || !content?.trim() || !req.file) {
+        return res.status(400).json({
+          code: 400,
+          message: "Vui lòng nhập tiêu đề, nội dung và chọn ảnh đại diện.",
+        });
+      }
+
+      if (!["draft", "published", "hidden"].includes(status)) {
+        return res.status(400).json({ code: 400, message: "Trạng thái bài viết không hợp lệ." });
+      }
 
       // Lấy thông tin User đăng nhập hiện tại từ Database để lấy tên hiển thị
       const user = await User.findById(req.user.id);
@@ -156,7 +175,7 @@ router.post(
       // Kiểm tra trùng lặp tiêu đề (không phân biệt hoa thường) HOẶC trùng lặp nội dung bài viết
       const existingNews = await News.findOne({
         $or: [
-          { title: { $regex: new RegExp("^" + title.trim() + "$", "i") } },
+          { title: { $regex: new RegExp("^" + escapeRegExp(title.trim()) + "$", "i") } },
           { content: content.trim() },
         ],
       });
@@ -176,14 +195,14 @@ router.post(
       // Khởi tạo đối tượng bài viết mới từ dữ liệu gửi lên
       const newNews = new News({
         title: title.trim(),
-        content,
-        image,
+        content: content.trim(),
+        image: `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`,
         status, // Trạng thái bài viết: 'draft' (nháp), 'published' (xuất bản), 'hidden' (ẩn)
         author: authorName, // Gán động tên hiển thị của Admin vừa đăng bài
       });
 
       // Lưu bài viết vào cơ sở dữ liệu
-      const savedNews = await newNews.save();
+      savedNews = await newNews.save();
 
       return res.status(201).json({
         code: 201,
@@ -196,8 +215,10 @@ router.post(
         message: "Lỗi khi tạo bài viết mới",
         error: error.message,
       });
+    } finally {
+      if (req.file && !savedNews) fs.unlink(req.file.path, () => {});
     }
-  },
+  }),
 );
 
 /**
@@ -220,7 +241,7 @@ router.put(
 
         if (title) {
           checkConditions.push({
-            title: { $regex: new RegExp("^" + title.trim() + "$", "i") },
+            title: { $regex: new RegExp("^" + escapeRegExp(title.trim()) + "$", "i") },
           });
         }
         if (content) {
