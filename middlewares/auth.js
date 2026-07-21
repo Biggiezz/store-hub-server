@@ -31,7 +31,9 @@ const authenticateToken = (req, res, next) => {
 // Middleware phân quyền theo Role (Authorization)
 const authorizeRoles = (...allowedRoles) => {
   return (req, res, next) => {
-    if (!req.user || !allowedRoles.includes(req.user.role)) {
+    const role = String(req.user?.role || "").replace(/\s+/g, "").toLowerCase();
+    const normalizedRoles = allowedRoles.map((item) => item.replace(/\s+/g, "").toLowerCase());
+    if (!normalizedRoles.includes(role)) {
       return res.status(403).json({
         code: 403,
         message: "Bạn không có quyền thực hiện chức năng này.",

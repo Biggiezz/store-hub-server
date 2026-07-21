@@ -372,4 +372,58 @@ router.post("/shipping-quote", async (req, res) => {
   }
 });
 
+// POST /api/productsRouter/checkout - Thanh toán giỏ hàng và tạo Đơn hàng
+router.post("/checkout", async (req, res) => {
+  try {
+    const Order = require("../models/Order");
+    const cartItems = await Cart.find({});
+
+    if (cartItems.length === 0) {
+      return res.status(400).json({
+        code: 400,
+        message: "Giỏ hàng của bạn đang trống"
+      });
+    }
+
+    const orderItems = cartItems.map((item) => ({
+      product: item.productId,
+      quantity: item.quantity,
+      price: item.price,
+      color: { id: item.colorId, name: item.colorName }
+    }));
+    const subtotal = cartItems.reduce(
+      (total, item) => total + item.price * item.quantity,
+      0
+    );
+
+    const shippingFee = subtotal === 0 ? 0 : 40000;
+    const totalAmount = subtotal + shippingFee;
+
+    const newOrder = new Order({
+      items: orderItems,
+      subtotal,
+      shippingFee,
+      totalAmount,
+      status: "completed"
+    });
+
+    const savedOrder = await newOrder.save();
+
+    // ponytail: giỏ hàng hiện dùng chung; thêm userId + transaction khi tách giỏ theo tài khoản.
+    await Cart.deleteMany({});
+
+    res.status(200).json({
+      code: 200,
+      message: "Thanh toán đơn hàng thành công!",
+      data: savedOrder
+    });
+  } catch (error) {
+    console.error("Lỗi khi thanh toán đơn hàng:", error);
+    res.status(500).json({
+      code: 500,
+      message: "Lỗi máy chủ khi thanh toán đơn hàng."
+    });
+  }
+});
+
 module.exports = router;
