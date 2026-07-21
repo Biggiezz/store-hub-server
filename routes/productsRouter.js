@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Product = require("../models/Product");
 const Cart = require("../models/Cart");
+const Order = require("../models/Order");
 
 const redis = require("redis");
 const client = process.env.REDIS_URL
