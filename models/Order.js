@@ -70,11 +70,23 @@ const orderSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      default: "Đang giao hàng",
+      default: "Chờ xác nhận",
     },
     cancelReason: {
       type: String,
       default: "",
+    },
+    confirmedAt: {
+      type: Date,
+    },
+    warehouseAt: {
+      type: Date,
+    },
+    deliveringAt: {
+      type: Date,
+    },
+    completedAt: {
+      type: Date,
     },
   },
   { timestamps: true }

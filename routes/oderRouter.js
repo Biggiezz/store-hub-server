@@ -3,6 +3,7 @@ const router = express.Router();
 const Order = require("../models/Order");
 const Cart = require("../models/Cart");
 const Product = require("../models/Product");
+const User = require("../models/users");
 
 // POST create order from cart
 router.post("/create-order", async (req, res) => {
@@ -30,15 +31,20 @@ router.post("/create-order", async (req, res) => {
 
     const orderCode = `#SH-${Date.now().toString().slice(-6)}`;
 
+    const userDoc = userId ? await User.findById(userId) : null;
+
     const newOrder = new Order({
       orderCode,
       items: orderItems,
       subtotal: totalPrice,
       totalPrice,
       totalAmount: totalPrice + 40000,
-      status: "Đang giao hàng",
+      status: "Chờ xác nhận",
       shippingFee: 40000,
       user: userId || null,
+      receiverName: userDoc ? userDoc.name : "",
+      receiverPhone: userDoc ? userDoc.phone : "",
+      deliveryAddress: userDoc ? userDoc.address : "",
     });
 
     const savedOrder = await newOrder.save();
@@ -76,11 +82,29 @@ router.get("/get-orders", async (req, res) => {
       query.user = userId;
     }
 
-    const orders = await Order.find(query).sort({ createdAt: -1 });
+    const orders = await Order.find(query).populate("user").sort({ createdAt: -1 });
+
+    // Fallback to user profile info if order receiver fields are empty
+    const mappedOrders = orders.map(order => {
+      const orderObj = order.toObject();
+      if (order.user) {
+        if (!orderObj.receiverName || orderObj.receiverName.trim() === "") {
+          orderObj.receiverName = order.user.name || "";
+        }
+        if (!orderObj.receiverPhone || orderObj.receiverPhone.trim() === "") {
+          orderObj.receiverPhone = order.user.phone || "";
+        }
+        if (!orderObj.deliveryAddress || orderObj.deliveryAddress.trim() === "") {
+          orderObj.deliveryAddress = order.user.address || "";
+        }
+      }
+      return orderObj;
+    });
+
     res.status(200).json({
       code: 200,
       message: "Lấy danh sách đơn hàng thành công",
-      data: orders,
+      data: mappedOrders,
     });
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message, data: [] });
@@ -115,6 +139,48 @@ router.post("/cancel-order", async (req, res) => {
     res.status(500).json({ code: 500, message: error.message });
   }
 });
+// POST update order status
+router.post("/update-status", async (req, res) => {
+  try {
+    const { orderId, status } = req.body;
+    if (!orderId || !status) {
+      return res.status(400).json({ code: 400, message: "Thiếu mã đơn hàng hoặc trạng thái" });
+    }
+
+    const updateFields = { status };
+    const now = new Date();
+    if (status === "Đã xác nhận") {
+      updateFields.confirmedAt = now;
+    } else if (status === "Đã rời kho") {
+      updateFields.warehouseAt = now;
+    } else if (status === "Đang giao hàng") {
+      updateFields.deliveringAt = now;
+    } else if (status === "Đã giao hàng" || status === "Đã hoàn thành") {
+      updateFields.completedAt = now;
+    }
+
+    const result = await Order.updateOne(
+      { _id: orderId },
+      { $set: updateFields }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy đơn hàng" });
+    }
+
+    const updatedOrder = await Order.findById(orderId);
+
+    res.status(200).json({
+      code: 200,
+      message: "Cập nhật trạng thái thành công",
+      data: updatedOrder,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
+
 
 
 // POST clear all items in cart
