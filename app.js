@@ -9,6 +9,7 @@ var indexRouter = require("./routes/index");
 var usersRouter = require("./routes/usersRouter");
 var productsRouter = require("./routes/productsRouter");
 var newsRouter = require("./routes/newsRouter");
+var oderRouter = require("./routes/oderRouter");
 const database = require("./config/db");
 
 var app = express();
@@ -27,6 +28,7 @@ app.use("/", indexRouter);
 app.use("/users", usersRouter);
 app.use("/api/productsRouter", productsRouter);
 app.use("/api/newsRouter", newsRouter);
+app.use("/api/oderRouter", oderRouter);
 
 database.connectDB();
 
