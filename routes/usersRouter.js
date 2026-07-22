@@ -393,14 +393,14 @@ router.get("/admin/revenue-stats", async (req, res) => {
 
     const orders = await Order.find({
       createdAt: { $gte: startDate, $lte: endDate },
-      status: "completed"
+      status: { $nin: ["Đã hủy", "cancelled"] }
     });
 
     let totalRevenue = 0;
     let totalOrders = orders.length;
 
     orders.forEach((order) => {
-      totalRevenue += order.totalAmount || 0;
+      totalRevenue += order.totalAmount ?? ((order.totalPrice || 0) + (order.shippingFee || 0));
     });
 
     const revenueByLabel = new Array(daysLabels.length).fill(0);
@@ -417,11 +417,12 @@ router.get("/admin/revenue-stats", async (req, res) => {
       }
 
       if (index >= 0 && index < revenueByLabel.length) {
-        revenueByLabel[index] += (order.totalAmount || 0) / 1000000;
+        const orderRevenue = order.totalAmount ?? ((order.totalPrice || 0) + (order.shippingFee || 0));
+        revenueByLabel[index] += orderRevenue / 1000000;
       }
 
       order.items.forEach((item) => {
-        const productId = String(item.product);
+        const productId = String(item.product || item.productId);
         const current = salesByProduct.get(productId) || { soldCount: 0, revenue: 0 };
         current.soldCount += item.quantity || 0;
         current.revenue += (item.price || 0) * (item.quantity || 0);
@@ -435,7 +436,7 @@ router.get("/admin/revenue-stats", async (req, res) => {
       revenue: parseFloat(rev.toFixed(2))
     }));
 
-    const productIds = [...salesByProduct.keys()];
+    const productIds = [...salesByProduct.keys()].filter((id) => /^[a-f\d]{24}$/i.test(id));
     const products = await Product.find({ _id: { $in: productIds } })
       .select("name image");
     const productsById = new Map(products.map((product) => [String(product._id), product]));
@@ -454,14 +455,17 @@ router.get("/admin/revenue-stats", async (req, res) => {
       .slice(0, 3);
 
     const [recentOrders, recentUsers, lowStockProducts] = await Promise.all([
-      Order.find({ status: "completed" }).sort({ createdAt: -1 }).limit(5),
+      Order.find({ status: { $nin: ["Đã hủy", "cancelled"] } })
+        .populate("user", "name")
+        .sort({ createdAt: -1 })
+        .limit(5),
       User.find({ role: "customer" }).sort({ createdAt: -1 }).limit(5),
       Product.find({ stock: { $lte: 10 } }).sort({ stock: 1, updatedAt: -1 }).limit(5),
     ]);
     const recentActivities = [
       ...recentOrders.map((order) => ({
         type: "order",
-        title: `${order.receiverName || "Khách hàng"} vừa mua hàng`,
+        title: `${order.user?.name || order.receiverName || "Khách hàng"} vừa mua hàng`,
         createdAt: order.createdAt,
       })),
       ...recentUsers.map((user) => ({

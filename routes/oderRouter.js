@@ -7,6 +7,7 @@ const Product = require("../models/Product");
 // POST create order from cart
 router.post("/create-order", async (req, res) => {
   try {
+    const userId = req.query.userId || req.body.userId;
     const cartItems = await Cart.find({});
     if (cartItems.length === 0) {
       return res.status(400).json({ code: 400, message: "Giỏ hàng đang trống" });
@@ -16,6 +17,7 @@ router.post("/create-order", async (req, res) => {
     const orderItems = cartItems.map((item) => {
       totalPrice += (item.price || 0) * (item.quantity || 1);
       return {
+        product: item.productId,
         productId: item.productId,
         productName: item.productName,
         productImage: item.productImage,
@@ -31,9 +33,12 @@ router.post("/create-order", async (req, res) => {
     const newOrder = new Order({
       orderCode,
       items: orderItems,
+      subtotal: totalPrice,
       totalPrice,
+      totalAmount: totalPrice + 40000,
       status: "Đang giao hàng",
       shippingFee: 40000,
+      user: userId || null,
     });
 
     const savedOrder = await newOrder.save();
@@ -54,16 +59,24 @@ router.post("/create-order", async (req, res) => {
 // GET all orders
 router.get("/get-orders", async (req, res) => {
   try {
-    // Delete any old invalid mockup orders
+    // Delete any old invalid mockup orders or orders without user
     await Order.deleteMany({
       $or: [
         { orderCode: { $exists: false } },
         { orderCode: "" },
-        { orderCode: null }
+        { orderCode: null },
+        { user: null },
+        { user: { $exists: false } }
       ]
     });
 
-    const orders = await Order.find({}).sort({ createdAt: -1 });
+    const userId = req.query.userId || req.body.userId;
+    let query = {};
+    if (userId) {
+      query.user = userId;
+    }
+
+    const orders = await Order.find(query).sort({ createdAt: -1 });
     res.status(200).json({
       code: 200,
       message: "Lấy danh sách đơn hàng thành công",
