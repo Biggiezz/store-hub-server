@@ -4,17 +4,39 @@ const Product = require("../models/Product");
 const Cart = require("../models/Cart");
 
 const redis = require("redis");
-const client = process.env.REDIS_URL
-  ? redis.createClient({ url: process.env.REDIS_URL })
-  : null;
+let client = null;
 
-if (client) {
-  client.on("error", (error) => console.error(`Redis error: ${error.message}`));
+// --- Code gốc của team (được comment lại để tham chiếu) ---
+// if (client) {
+//   client.on("error", (error) => console.error(`Redis error: ${error.message}`));
+//   client
+//     .connect()
+//     .catch((error) =>
+//       console.error(`Redis connection failed: ${error.message}`),
+//     );
+// }
+
+// --- Code xử lý Redis an toàn cho máy local (tự động chuyển sang MongoDB nếu chưa bật Redis) ---
+if (process.env.REDIS_URL) {
+  client = redis.createClient({
+    url: process.env.REDIS_URL,
+    socket: {
+      reconnectStrategy: false, // Tắt tự động kết nối lại liên tục để không bị rác terminal nếu chưa cài Redis Server
+    },
+  });
+
+  client.on("error", () => {
+    // Bỏ qua log rác khi không có dịch vụ Redis trên máy
+  });
+
   client
     .connect()
-    .catch((error) =>
-      console.error(`Redis connection failed: ${error.message}`),
-    );
+    .then(() => console.log("✅ Redis Connected Successfully"))
+    .catch(() => {
+      console.log(
+        "⚠️ Máy cục bộ chưa chạy Redis Server (Tự động bỏ qua Redis, dùng MongoDB trực tiếp).",
+      );
+    });
 }
 
 // GET all products with pagination (Default 6 products per page)
