@@ -45,9 +45,12 @@ const Product = new mongoose.Schema(
       {
         id: { type: String },
         customerName: { type: String },
+        customerImage: { type: String, default: "" },
         createdAt: { type: String },
         rating: { type: Number, default: 0 },
         content: { type: String },
+        replyContent: { type: String, default: "" },
+        replyCreatedAt: { type: String, default: "" },
       },
     ],
   },

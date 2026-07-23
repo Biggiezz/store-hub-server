@@ -113,7 +113,7 @@ router.get("/get-product-by-id/:id", async (req, res) => {
 // POST add a product review
 router.post("/add-review", async (req, res) => {
   try {
-    const { productId, customerName, rating, content } = req.body;
+    const { productId, customerName, customerImage, rating, content } = req.body;
     if (!productId || !customerName || rating === undefined || !content) {
       return res
         .status(400)
@@ -133,6 +133,7 @@ router.post("/add-review", async (req, res) => {
     const newReview = {
       id: Date.now().toString(),
       customerName,
+      customerImage: customerImage || "",
       rating: parseFloat(rating),
       content,
       createdAt: formattedDate,
@@ -155,6 +156,42 @@ router.post("/add-review", async (req, res) => {
     res.status(200).json({
       code: 200,
       message: "Đã thêm đánh giá thành công",
+      data: product,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
+// POST reply to a review
+router.post("/reply-review", async (req, res) => {
+  try {
+    const { productId, reviewId, replyContent } = req.body;
+    if (!productId || !reviewId || !replyContent) {
+      return res.status(400).json({ code: 400, message: "Thiếu thông tin phản hồi" });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm" });
+    }
+
+    const review = product.reviews.find((r) => r.id === reviewId || r._id.toString() === reviewId);
+    if (!review) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy đánh giá" });
+    }
+
+    const now = new Date();
+    const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
+
+    review.replyContent = replyContent;
+    review.replyCreatedAt = formattedDate;
+
+    await product.save();
+
+    res.status(200).json({
+      code: 200,
+      message: "Đã phản hồi đánh giá thành công",
       data: product,
     });
   } catch (error) {

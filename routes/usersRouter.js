@@ -571,4 +571,19 @@ router.post("/add-user", authenticateToken, async (req, res) => {
   }
 });
 
+// GET user by ID
+router.get("/get-user-by-id/:id", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng", data: null });
+    }
+    const userObj = user.toObject();
+    delete userObj.password;
+    res.status(200).json({ code: 200, message: "Lấy thông tin người dùng thành công", data: userObj });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message, data: null });
+  }
+});
+
 module.exports = router;
