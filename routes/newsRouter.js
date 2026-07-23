@@ -230,10 +230,13 @@ router.put(
   "/admin/update-news/:id",
   authenticateToken,
   authorizeRoles("admin", "superadmin"),
-  async (req, res) => {
+  (req, res) => upload.single("image")(req, res, async (uploadError) => {
+    if (uploadError) {
+      return res.status(400).json({ code: 400, message: uploadError.message });
+    }
     try {
       const { id } = req.params;
-      const { title, content, image, status, author } = req.body;
+      const { title, content, status } = req.body;
 
       // Nếu người dùng có thay đổi tiêu đề hoặc nội dung, tiến hành kiểm tra trùng lặp
       if (title || content) {
@@ -267,10 +270,18 @@ router.put(
         }
       }
 
-      // Chuẩn bị dữ liệu cập nhật (nếu có title thì trim trước khi lưu)
-      const updateData = { ...req.body };
-      if (title) {
-        updateData.title = title.trim();
+      // Chuẩn bị dữ liệu cập nhật
+      const updateData = {};
+      if (title !== undefined) updateData.title = title.trim();
+      if (content !== undefined) updateData.content = content.trim();
+      if (status !== undefined) {
+        if (!["draft", "published", "hidden"].includes(status)) {
+          return res.status(400).json({ code: 400, message: "Trạng thái bài viết không hợp lệ." });
+        }
+        updateData.status = status;
+      }
+      if (req.file) {
+        updateData.image = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
       }
 
       // Tìm và cập nhật bài viết theo ID
@@ -299,7 +310,7 @@ router.put(
         error: error.message,
       });
     }
-  },
+  }),
 );
 
 /**
