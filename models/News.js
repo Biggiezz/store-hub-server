@@ -45,5 +45,8 @@ const NewsSchema = new mongoose.Schema(
   }
 );
 
+NewsSchema.index({ status: 1 });
+NewsSchema.index({ createdAt: -1 });
+
 // Xuất model "News" dựa trên NewsSchema, liên kết với collection "news" trong MongoDB
 module.exports = mongoose.model("News", NewsSchema);

@@ -113,7 +113,7 @@ router.get("/get-product-by-id/:id", async (req, res) => {
 // POST add a product review
 router.post("/add-review", async (req, res) => {
   try {
-    const { productId, customerName, customerImage, rating, content } = req.body;
+    const { productId, customerName, customerImage, rating, content, orderId } = req.body;
     if (!productId || !customerName || rating === undefined || !content) {
       return res
         .status(400)
@@ -125,6 +125,17 @@ router.post("/add-review", async (req, res) => {
       return res
         .status(404)
         .json({ code: 404, message: "Không tìm thấy sản phẩm" });
+    }
+
+    // Check if order was already reviewed
+    if (orderId) {
+      const Order = require("../models/Order");
+      const order = await Order.findById(orderId);
+      if (order && order.isReviewed) {
+        return res
+          .status(400)
+          .json({ code: 400, message: "Đơn hàng này đã được đánh giá trước đó" });
+      }
     }
 
     const now = new Date();
@@ -152,6 +163,11 @@ router.post("/add-review", async (req, res) => {
     product.rating = parseFloat((totalRating / product.reviewCount).toFixed(1));
 
     await product.save();
+
+    if (orderId) {
+      const Order = require("../models/Order");
+      await Order.findByIdAndUpdate(orderId, { isReviewed: true });
+    }
 
     res.status(200).json({
       code: 200,

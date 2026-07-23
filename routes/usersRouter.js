@@ -324,22 +324,27 @@ router.put("/change-password", authenticateToken, async (req, res) => {
 router.get("/admin/dashboard", async (req, res) => {
   try {
     const Product = require("../models/Product");
-    const Cart = require("../models/Cart");
+    const Order = require("../models/Order");
 
-    const [totalUsers, totalProducts, cartItems] = await Promise.all([
+    const [totalUsers, totalProducts, completedOrders, totalOrders, pendingOrders] = await Promise.all([
       User.countDocuments(),
       Product.countDocuments(),
-      Cart.find(),
+      Order.find({ status: { $in: ["Đã giao hàng", "Đã hoàn thành"] } }),
+      Order.countDocuments(),
+      Order.countDocuments({ status: "Chờ xác nhận" }),
     ]);
 
-    const totalSalesCount = cartItems.reduce(
-      (total, item) => total + (item.quantity || 0),
-      0,
-    );
-    const totalSalesAmount = cartItems.reduce(
-      (total, item) => total + (item.price || 0) * (item.quantity || 0),
-      0,
-    );
+    let totalSalesCount = 0;
+    let totalSalesAmount = 0;
+
+    for (const order of completedOrders) {
+      totalSalesAmount += (order.totalPrice || 0);
+      if (order.items) {
+        for (const item of order.items) {
+          totalSalesCount += (item.quantity || 0);
+        }
+      }
+    }
 
     res.status(200).json({
       code: 200,
@@ -351,7 +356,9 @@ router.get("/admin/dashboard", async (req, res) => {
         totalUsers: totalUsers,
         usersStatus: `+${totalUsers} thành viên`,
         totalProducts: totalProducts,
-        productsStatus: "Đang kinh doanh"
+        productsStatus: "Đang kinh doanh",
+        totalOrders: totalOrders,
+        pendingOrders: pendingOrders
       }
     });
   } catch (error) {
