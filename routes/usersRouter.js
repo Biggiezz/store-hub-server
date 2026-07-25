@@ -499,4 +499,101 @@ router.get("/admin/revenue-stats", async (req, res) => {
   }
 });
 
+// Lấy danh sách toàn bộ người dùng
+router.get("/get-all-users", authenticateToken, async (req, res) => {
+  try {
+    const users = await User.find({}).sort({ createdAt: -1 });
+    return res.status(200).json({
+      code: 200,
+      message: "Lấy danh sách người dùng thành công",
+      data: users
+    });
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      message: "Lỗi máy chủ khi lấy danh sách người dùng.",
+      error: error.message
+    });
+  }
+});
+
+// Thêm người dùng mới (dành cho Admin/Super Admin)
+router.post("/add-user", authenticateToken, async (req, res) => {
+  try {
+    const { name, email, phone, role, password, address, image } = req.body;
+    if (!name || !email || !phone || !password) {
+      return res.status(400).json({
+        code: 400,
+        message: "Thiếu thông tin bắt buộc (họ tên, email, SĐT, mật khẩu)."
+      });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        code: 400,
+        message: "Email đã tồn tại trên hệ thống."
+      });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const newUser = new User({
+      name,
+      email,
+      phone,
+      role: role || "customer",
+      password: hashedPassword,
+      address: address || "",
+      image: image || ""
+    });
+
+    const savedUser = await newUser.save();
+    const userResponse = savedUser.toObject();
+    delete userResponse.password;
+
+    return res.status(201).json({
+      code: 201,
+      message: "Thêm người dùng thành công",
+      data: userResponse
+    });
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      message: "Lỗi máy chủ khi thêm người dùng.",
+      error: error.message
+    });
+  }
+});
+
+// GET user by ID
+router.get("/get-user-by-id/:id", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng", data: null });
+    }
+    const userObj = user.toObject();
+    delete userObj.password;
+    res.status(200).json({ code: 200, message: "Lấy thông tin người dùng thành công", data: userObj });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message, data: null });
+  }
+});
+
+router.post("/logout", authenticateToken, async (req, res) => {
+  try {
+    res.status(200).json({
+      code: 200,
+      message: "Đăng xuất thành công."
+    });
+  } catch (error) {
+    res.status(500).json({
+      code: 500,
+      message: "Lỗi máy chủ khi đăng xuất.",
+      error: error.message
+    });
+  }
+});
 module.exports = router;
