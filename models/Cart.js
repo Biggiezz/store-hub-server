@@ -23,6 +23,10 @@ const CartItemSchema = new mongoose.Schema(
     colorName: {
       type: String,
     },
+    // Mã Hex của màu sắc được chọn để hiển thị chấm tròn màu trực quan trong giỏ hàng phía Client
+    colorHex: {
+      type: String,
+    },
     // Giá bán của một sản phẩm
     price: {
       type: Number,

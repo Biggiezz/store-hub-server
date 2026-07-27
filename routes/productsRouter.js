@@ -247,12 +247,14 @@ router.post("/add-to-cart", async (req, res) => {
     }
 
     let colorName = "";
+    let colorHex = "";
     if (colorId && product.colors && product.colors.length > 0) {
       const matchedColor = product.colors.find(
         (c) => c.id == colorId || c._id == colorId,
       );
       if (matchedColor) {
         colorName = matchedColor.name;
+        colorHex = matchedColor.hex; // Lấy thêm mã màu Hex tương ứng
       }
     }
 
@@ -276,6 +278,12 @@ router.post("/add-to-cart", async (req, res) => {
           colorName ||
           (product.colors && product.colors.length > 0
             ? product.colors[0].name
+            : ""),
+        // Lưu mã Hex tương ứng để hiển thị chấm màu ở Client (mặc định lấy màu đầu tiên nếu lỗi)
+        colorHex:
+          colorHex ||
+          (product.colors && product.colors.length > 0
+            ? product.colors[0].hex
             : ""),
         price: product.price,
         quantity: qty,
