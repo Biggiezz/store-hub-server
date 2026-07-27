@@ -6,17 +6,39 @@ const Order = require("../models/Order");
 const upload = require("../middlewares/upload");
 
 const redis = require("redis");
-const client = process.env.REDIS_URL
-  ? redis.createClient({ url: process.env.REDIS_URL })
-  : null;
+let client = null;
 
-if (client) {
-  client.on("error", (error) => console.error(`Redis error: ${error.message}`));
+// --- Code gốc của team (được comment lại để tham chiếu) ---
+// if (client) {
+//   client.on("error", (error) => console.error(`Redis error: ${error.message}`));
+//   client
+//     .connect()
+//     .catch((error) =>
+//       console.error(`Redis connection failed: ${error.message}`),
+//     );
+// }
+
+// --- Code xử lý Redis an toàn cho máy local (tự động chuyển sang MongoDB nếu chưa bật Redis) ---
+if (process.env.REDIS_URL) {
+  client = redis.createClient({
+    url: process.env.REDIS_URL,
+    socket: {
+      reconnectStrategy: false, // Tắt tự động kết nối lại liên tục để không bị rác terminal nếu chưa cài Redis Server
+    },
+  });
+
+  client.on("error", () => {
+    // Bỏ qua log rác khi không có dịch vụ Redis trên máy
+  });
+
   client
     .connect()
-    .catch((error) =>
-      console.error(`Redis connection failed: ${error.message}`),
-    );
+    .then(() => console.log("✅ Redis Connected Successfully"))
+    .catch(() => {
+      console.log(
+        "⚠️ Máy cục bộ chưa chạy Redis Server (Tự động bỏ qua Redis, dùng MongoDB trực tiếp).",
+      );
+    });
 }
 
 // GET all products with pagination (Default 6 products per page)
@@ -91,7 +113,7 @@ router.get("/get-product-by-id/:id", async (req, res) => {
 // POST add a product review
 router.post("/add-review", async (req, res) => {
   try {
-    const { productId, customerName, rating, content } = req.body;
+    const { productId, customerName, customerImage, rating, content, orderId } = req.body;
     if (!productId || !customerName || rating === undefined || !content) {
       return res
         .status(400)
@@ -105,12 +127,24 @@ router.post("/add-review", async (req, res) => {
         .json({ code: 404, message: "Không tìm thấy sản phẩm" });
     }
 
+    // Check if order was already reviewed
+    if (orderId) {
+      const Order = require("../models/Order");
+      const order = await Order.findById(orderId);
+      if (order && order.isReviewed) {
+        return res
+          .status(400)
+          .json({ code: 400, message: "Đơn hàng này đã được đánh giá trước đó" });
+      }
+    }
+
     const now = new Date();
     const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
 
     const newReview = {
       id: Date.now().toString(),
       customerName,
+      customerImage: customerImage || "",
       rating: parseFloat(rating),
       content,
       createdAt: formattedDate,
@@ -130,9 +164,50 @@ router.post("/add-review", async (req, res) => {
 
     await product.save();
 
+    if (orderId) {
+      const Order = require("../models/Order");
+      await Order.findByIdAndUpdate(orderId, { isReviewed: true });
+    }
+
     res.status(200).json({
       code: 200,
       message: "Đã thêm đánh giá thành công",
+      data: product,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
+// POST reply to a review
+router.post("/reply-review", async (req, res) => {
+  try {
+    const { productId, reviewId, replyContent } = req.body;
+    if (!productId || !reviewId || !replyContent) {
+      return res.status(400).json({ code: 400, message: "Thiếu thông tin phản hồi" });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm" });
+    }
+
+    const review = product.reviews.find((r) => r.id === reviewId || r._id.toString() === reviewId);
+    if (!review) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy đánh giá" });
+    }
+
+    const now = new Date();
+    const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
+
+    review.replyContent = replyContent;
+    review.replyCreatedAt = formattedDate;
+
+    await product.save();
+
+    res.status(200).json({
+      code: 200,
+      message: "Đã phản hồi đánh giá thành công",
       data: product,
     });
   } catch (error) {
@@ -172,12 +247,14 @@ router.post("/add-to-cart", async (req, res) => {
     }
 
     let colorName = "";
+    let colorHex = "";
     if (colorId && product.colors && product.colors.length > 0) {
       const matchedColor = product.colors.find(
         (c) => c.id == colorId || c._id == colorId,
       );
       if (matchedColor) {
         colorName = matchedColor.name;
+        colorHex = matchedColor.hex; // Lấy thêm mã màu Hex tương ứng
       }
     }
 
@@ -201,6 +278,12 @@ router.post("/add-to-cart", async (req, res) => {
           colorName ||
           (product.colors && product.colors.length > 0
             ? product.colors[0].name
+            : ""),
+        // Lưu mã Hex tương ứng để hiển thị chấm màu ở Client (mặc định lấy màu đầu tiên nếu lỗi)
+        colorHex:
+          colorHex ||
+          (product.colors && product.colors.length > 0
+            ? product.colors[0].hex
             : ""),
         price: product.price,
         quantity: qty,

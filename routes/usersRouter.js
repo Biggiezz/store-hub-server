@@ -324,22 +324,27 @@ router.put("/change-password", authenticateToken, async (req, res) => {
 router.get("/admin/dashboard", async (req, res) => {
   try {
     const Product = require("../models/Product");
-    const Cart = require("../models/Cart");
+    const Order = require("../models/Order");
 
-    const [totalUsers, totalProducts, cartItems] = await Promise.all([
+    const [totalUsers, totalProducts, completedOrders, totalOrders, pendingOrders] = await Promise.all([
       User.countDocuments(),
       Product.countDocuments(),
-      Cart.find(),
+      Order.find({ status: { $in: ["Đã giao hàng", "Đã hoàn thành"] } }),
+      Order.countDocuments(),
+      Order.countDocuments({ status: "Chờ xác nhận" }),
     ]);
 
-    const totalSalesCount = cartItems.reduce(
-      (total, item) => total + (item.quantity || 0),
-      0,
-    );
-    const totalSalesAmount = cartItems.reduce(
-      (total, item) => total + (item.price || 0) * (item.quantity || 0),
-      0,
-    );
+    let totalSalesCount = 0;
+    let totalSalesAmount = 0;
+
+    for (const order of completedOrders) {
+      totalSalesAmount += (order.totalPrice || 0);
+      if (order.items) {
+        for (const item of order.items) {
+          totalSalesCount += (item.quantity || 0);
+        }
+      }
+    }
 
     res.status(200).json({
       code: 200,
@@ -351,7 +356,9 @@ router.get("/admin/dashboard", async (req, res) => {
         totalUsers: totalUsers,
         usersStatus: `+${totalUsers} thành viên`,
         totalProducts: totalProducts,
-        productsStatus: "Đang kinh doanh"
+        productsStatus: "Đang kinh doanh",
+        totalOrders: totalOrders,
+        pendingOrders: pendingOrders
       }
     });
   } catch (error) {
@@ -393,14 +400,14 @@ router.get("/admin/revenue-stats", async (req, res) => {
 
     const orders = await Order.find({
       createdAt: { $gte: startDate, $lte: endDate },
-      status: "completed"
+      status: { $nin: ["Đã hủy", "cancelled"] }
     });
 
     let totalRevenue = 0;
     let totalOrders = orders.length;
 
     orders.forEach((order) => {
-      totalRevenue += order.totalAmount || 0;
+      totalRevenue += order.totalAmount ?? ((order.totalPrice || 0) + (order.shippingFee || 0));
     });
 
     const revenueByLabel = new Array(daysLabels.length).fill(0);
@@ -417,11 +424,12 @@ router.get("/admin/revenue-stats", async (req, res) => {
       }
 
       if (index >= 0 && index < revenueByLabel.length) {
-        revenueByLabel[index] += (order.totalAmount || 0) / 1000000;
+        const orderRevenue = order.totalAmount ?? ((order.totalPrice || 0) + (order.shippingFee || 0));
+        revenueByLabel[index] += orderRevenue / 1000000;
       }
 
       order.items.forEach((item) => {
-        const productId = String(item.product);
+        const productId = String(item.product || item.productId);
         const current = salesByProduct.get(productId) || { soldCount: 0, revenue: 0 };
         current.soldCount += item.quantity || 0;
         current.revenue += (item.price || 0) * (item.quantity || 0);
@@ -435,7 +443,7 @@ router.get("/admin/revenue-stats", async (req, res) => {
       revenue: parseFloat(rev.toFixed(2))
     }));
 
-    const productIds = [...salesByProduct.keys()];
+    const productIds = [...salesByProduct.keys()].filter((id) => /^[a-f\d]{24}$/i.test(id));
     const products = await Product.find({ _id: { $in: productIds } })
       .select("name image");
     const productsById = new Map(products.map((product) => [String(product._id), product]));
@@ -454,14 +462,17 @@ router.get("/admin/revenue-stats", async (req, res) => {
       .slice(0, 3);
 
     const [recentOrders, recentUsers, lowStockProducts] = await Promise.all([
-      Order.find({ status: "completed" }).sort({ createdAt: -1 }).limit(5),
+      Order.find({ status: { $nin: ["Đã hủy", "cancelled"] } })
+        .populate("user", "name")
+        .sort({ createdAt: -1 })
+        .limit(5),
       User.find({ role: "customer" }).sort({ createdAt: -1 }).limit(5),
       Product.find({ stock: { $lte: 10 } }).sort({ stock: 1, updatedAt: -1 }).limit(5),
     ]);
     const recentActivities = [
       ...recentOrders.map((order) => ({
         type: "order",
-        title: `${order.receiverName || "Khách hàng"} vừa mua hàng`,
+        title: `${order.user?.name || order.receiverName || "Khách hàng"} vừa mua hàng`,
         createdAt: order.createdAt,
       })),
       ...recentUsers.map((user) => ({
@@ -496,6 +507,89 @@ router.get("/admin/revenue-stats", async (req, res) => {
       code: 500,
       message: "Lỗi máy chủ khi lấy dữ liệu thống kê."
     });
+  }
+});
+
+// Lấy danh sách toàn bộ người dùng
+router.get("/get-all-users", authenticateToken, async (req, res) => {
+  try {
+    const users = await User.find({}).sort({ createdAt: -1 });
+    return res.status(200).json({
+      code: 200,
+      message: "Lấy danh sách người dùng thành công",
+      data: users
+    });
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      message: "Lỗi máy chủ khi lấy danh sách người dùng.",
+      error: error.message
+    });
+  }
+});
+
+// Thêm người dùng mới (dành cho Admin/Super Admin)
+router.post("/add-user", authenticateToken, async (req, res) => {
+  try {
+    const { name, email, phone, role, password, address, image } = req.body;
+    if (!name || !email || !phone || !password) {
+      return res.status(400).json({
+        code: 400,
+        message: "Thiếu thông tin bắt buộc (họ tên, email, SĐT, mật khẩu)."
+      });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        code: 400,
+        message: "Email đã tồn tại trên hệ thống."
+      });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const newUser = new User({
+      name,
+      email,
+      phone,
+      role: role || "customer",
+      password: hashedPassword,
+      address: address || "",
+      image: image || ""
+    });
+
+    const savedUser = await newUser.save();
+    const userResponse = savedUser.toObject();
+    delete userResponse.password;
+
+    return res.status(201).json({
+      code: 201,
+      message: "Thêm người dùng thành công",
+      data: userResponse
+    });
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      message: "Lỗi máy chủ khi thêm người dùng.",
+      error: error.message
+    });
+  }
+});
+
+// GET user by ID
+router.get("/get-user-by-id/:id", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng", data: null });
+    }
+    const userObj = user.toObject();
+    delete userObj.password;
+    res.status(200).json({ code: 200, message: "Lấy thông tin người dùng thành công", data: userObj });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message, data: null });
   }
 });
 

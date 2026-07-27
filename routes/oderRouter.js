@@ -71,6 +71,7 @@ function getStatusTimestamp(status) {
 // POST create order from cart
 router.post("/create-order", async (req, res) => {
   try {
+    const userId = req.query.userId || req.body.userId;
     const cartItems = await Cart.find({});
     if (cartItems.length === 0) {
       return res.status(400).json({ code: 400, message: "Giỏ hàng đang trống" });
@@ -80,6 +81,7 @@ router.post("/create-order", async (req, res) => {
     const orderItems = cartItems.map((item) => {
       totalPrice += (item.price || 0) * (item.quantity || 1);
       return {
+        product: item.productId,
         productId: item.productId,
         productName: item.productName,
         productImage: item.productImage,
@@ -92,12 +94,20 @@ router.post("/create-order", async (req, res) => {
 
     const orderCode = `#SH-${Date.now().toString().slice(-6)}`;
 
+    const userDoc = userId ? await User.findById(userId) : null;
+
     const newOrder = new Order({
       orderCode,
       items: orderItems,
+      subtotal: totalPrice,
       totalPrice,
-      status: "Đang giao hàng",
+      totalAmount: totalPrice + 40000,
+      status: "Chờ xác nhận",
       shippingFee: 40000,
+      user: userId || null,
+      receiverName: userDoc ? userDoc.name : "",
+      receiverPhone: userDoc ? userDoc.phone : "",
+      deliveryAddress: userDoc ? userDoc.address : "",
     });
 
     const savedOrder = await newOrder.save();
@@ -118,12 +128,14 @@ router.post("/create-order", async (req, res) => {
 // GET all orders
 router.get("/get-orders", async (req, res) => {
   try {
-    // Delete any old invalid mockup orders
+    // Delete any old invalid mockup orders or orders without user
     await Order.deleteMany({
       $or: [
         { orderCode: { $exists: false } },
         { orderCode: "" },
-        { orderCode: null }
+        { orderCode: null },
+        { user: null },
+        { user: { $exists: false } }
       ]
     });
 
@@ -286,6 +298,48 @@ router.post("/cancel-order", async (req, res) => {
     res.status(500).json({ code: 500, message: error.message });
   }
 });
+// POST update order status
+router.post("/update-status", async (req, res) => {
+  try {
+    const { orderId, status } = req.body;
+    if (!orderId || !status) {
+      return res.status(400).json({ code: 400, message: "Thiếu mã đơn hàng hoặc trạng thái" });
+    }
+
+    const updateFields = { status };
+    const now = new Date();
+    if (status === "Đã xác nhận") {
+      updateFields.confirmedAt = now;
+    } else if (status === "Đã rời kho") {
+      updateFields.warehouseAt = now;
+    } else if (status === "Đang giao hàng") {
+      updateFields.deliveringAt = now;
+    } else if (status === "Đã giao hàng" || status === "Đã hoàn thành") {
+      updateFields.completedAt = now;
+    }
+
+    const result = await Order.updateOne(
+      { _id: orderId },
+      { $set: updateFields }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy đơn hàng" });
+    }
+
+    const updatedOrder = await Order.findById(orderId);
+
+    res.status(200).json({
+      code: 200,
+      message: "Cập nhật trạng thái thành công",
+      data: updatedOrder,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
+
 
 
 // POST clear all items in cart
