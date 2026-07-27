@@ -196,7 +196,7 @@ router.post(
       const newNews = new News({
         title: title.trim(),
         content: content.trim(),
-        image: `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`,
+        image: req.file.path,
         status, // Trạng thái bài viết: 'draft' (nháp), 'published' (xuất bản), 'hidden' (ẩn)
         author: authorName, // Gán động tên hiển thị của Admin vừa đăng bài
       });
@@ -216,7 +216,10 @@ router.post(
         error: error.message,
       });
     } finally {
-      if (req.file && !savedNews) fs.unlink(req.file.path, () => {});
+      if (req.file && !savedNews && req.file.filename) {
+        const cloudinary = require("../config/cloudinary");
+        cloudinary.uploader.destroy(req.file.filename, () => {});
+      }
     }
   }),
 );
@@ -281,7 +284,7 @@ router.put(
         updateData.status = status;
       }
       if (req.file) {
-        updateData.image = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+        updateData.image = req.file.path;
       }
 
       // Tìm và cập nhật bài viết theo ID
