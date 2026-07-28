@@ -1,6 +1,45 @@
 const express = require("express");
 const router = express.Router();
 const Product = require("../models/Product");
+const Cart = require("../models/Cart");
+const Order = require("../models/Order");
+const upload = require("../middlewares/upload");
+
+const redis = require("redis");
+let client = null;
+
+// --- Code gốc của team (được comment lại để tham chiếu) ---
+// if (client) {
+//   client.on("error", (error) => console.error(`Redis error: ${error.message}`));
+//   client
+//     .connect()
+//     .catch((error) =>
+//       console.error(`Redis connection failed: ${error.message}`),
+//     );
+// }
+
+// --- Code xử lý Redis an toàn cho máy local (tự động chuyển sang MongoDB nếu chưa bật Redis) ---
+if (process.env.REDIS_URL) {
+  client = redis.createClient({
+    url: process.env.REDIS_URL,
+    socket: {
+      reconnectStrategy: false, // Tắt tự động kết nối lại liên tục để không bị rác terminal nếu chưa cài Redis Server
+    },
+  });
+
+  client.on("error", () => {
+    // Bỏ qua log rác khi không có dịch vụ Redis trên máy
+  });
+
+  client
+    .connect()
+    .then(() => console.log("✅ Redis Connected Successfully"))
+    .catch(() => {
+      console.log(
+        "⚠️ Máy cục bộ chưa chạy Redis Server (Tự động bỏ qua Redis, dùng MongoDB trực tiếp).",
+      );
+    });
+}
 
 // GET all products with pagination (Default 6 products per page)
 router.get("/get-all-product", async (req, res) => {
@@ -10,10 +49,12 @@ router.get("/get-all-product", async (req, res) => {
     const skip = (page - 1) * limit;
 
     // Lấy tổng số lượng sản phẩm để Client biết khi nào hết sản phẩm
-    const totalProducts = await Product.countDocuments({});
+    const category = String(req.query.category || "").trim();
+    const query = category ? { category } : {};
+    const totalProducts = await Product.countDocuments(query);
 
     // Lấy danh sách sản phẩm theo page và limit (sắp xếp mới nhất lên đầu để đảm bảo tính nhất quán khi phân trang)
-    const products = await Product.find({})
+    const products = await Product.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -26,10 +67,9 @@ router.get("/get-all-product", async (req, res) => {
         totalProducts,
         currentPage: page,
         totalPages: Math.ceil(totalProducts / limit),
-        limit
-      }
+        limit,
+      },
     });
-
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -44,29 +84,463 @@ router.get("/get-latest-product", async (req, res) => {
     res.status(200).json({
       code: 200,
       message: "Lấy danh sách sản phẩm mới nhất thành công",
-      data: latestProducts
+      data: latestProducts,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
+// GET single product detail by ID
+router.get("/get-product-by-id/:id", async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res
+        .status(404)
+        .json({ code: 404, message: "Không tìm thấy sản phẩm", data: null });
+    }
+    res.status(200).json({
+      code: 200,
+      message: "Lấy chi tiết sản phẩm thành công",
+      data: product,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message, data: null });
+  }
+});
+
+// POST add a product review
+router.post("/add-review", async (req, res) => {
+  try {
+    const { productId, customerName, customerImage, rating, content, orderId } = req.body;
+    if (!productId || !customerName || rating === undefined || !content) {
+      return res
+        .status(400)
+        .json({ code: 400, message: "Thiếu thông tin đánh giá" });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res
+        .status(404)
+        .json({ code: 404, message: "Không tìm thấy sản phẩm" });
+    }
+
+    // Check if order was already reviewed
+    if (orderId) {
+      const Order = require("../models/Order");
+      const order = await Order.findById(orderId);
+      if (order && order.isReviewed) {
+        return res
+          .status(400)
+          .json({ code: 400, message: "Đơn hàng này đã được đánh giá trước đó" });
+      }
+    }
+
+    const now = new Date();
+    const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
+
+    const newReview = {
+      id: Date.now().toString(),
+      customerName,
+      customerImage: customerImage || "",
+      rating: parseFloat(rating),
+      content,
+      createdAt: formattedDate,
+    };
+
+    if (!product.reviews) {
+      product.reviews = [];
+    }
+    product.reviews.unshift(newReview);
+
+    const totalRating = product.reviews.reduce(
+      (acc, cur) => acc + (cur.rating || 0),
+      0,
+    );
+    product.reviewCount = product.reviews.length;
+    product.rating = parseFloat((totalRating / product.reviewCount).toFixed(1));
+
+    await product.save();
+
+    if (orderId) {
+      const Order = require("../models/Order");
+      await Order.findByIdAndUpdate(orderId, { isReviewed: true });
+    }
+
+    res.status(200).json({
+      code: 200,
+      message: "Đã thêm đánh giá thành công",
+      data: product,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
+// POST reply to a review
+router.post("/reply-review", async (req, res) => {
+  try {
+    const { productId, reviewId, replyContent } = req.body;
+    if (!productId || !reviewId || !replyContent) {
+      return res.status(400).json({ code: 400, message: "Thiếu thông tin phản hồi" });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm" });
+    }
+
+    const review = product.reviews.find((r) => r.id === reviewId || r._id.toString() === reviewId);
+    if (!review) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy đánh giá" });
+    }
+
+    const now = new Date();
+    const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
+
+    review.replyContent = replyContent;
+    review.replyCreatedAt = formattedDate;
+
+    await product.save();
+
+    res.status(200).json({
+      code: 200,
+      message: "Đã phản hồi đánh giá thành công",
+      data: product,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
+// GET all cart items
+router.get("/get-cart", async (req, res) => {
+  try {
+    const cartItems = await Cart.find({}).sort({ createdAt: -1 });
+    res.status(200).json({
+      code: 200,
+      message: "Lấy danh sách giỏ hàng thành công",
+      data: cartItems,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message, data: [] });
+  }
+});
+
+// POST add product to cart
+router.post("/add-to-cart", async (req, res) => {
+  try {
+    const { productId, colorId, quantity } = req.body;
+    if (!productId) {
+      return res
+        .status(400)
+        .json({ code: 400, message: "Mã sản phẩm không hợp lệ" });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res
+        .status(404)
+        .json({ code: 404, message: "Không tìm thấy sản phẩm" });
+    }
+
+    let colorName = "";
+    let colorHex = "";
+    if (colorId && product.colors && product.colors.length > 0) {
+      const matchedColor = product.colors.find(
+        (c) => c.id == colorId || c._id == colorId,
+      );
+      if (matchedColor) {
+        colorName = matchedColor.name;
+        colorHex = matchedColor.hex; // Lấy thêm mã màu Hex tương ứng
+      }
+    }
+
+    const qty = parseInt(quantity) || 1;
+
+    let existingCartItem = await Cart.findOne({
+      productId: String(productId),
+      colorId: colorId ? String(colorId) : null,
+    });
+
+    if (existingCartItem) {
+      existingCartItem.quantity += qty;
+      await existingCartItem.save();
+    } else {
+      existingCartItem = new Cart({
+        productId: String(productId),
+        productName: product.name,
+        productImage: product.image,
+        colorId: colorId ? String(colorId) : null,
+        colorName:
+          colorName ||
+          (product.colors && product.colors.length > 0
+            ? product.colors[0].name
+            : ""),
+        // Lưu mã Hex tương ứng để hiển thị chấm màu ở Client (mặc định lấy màu đầu tiên nếu lỗi)
+        colorHex:
+          colorHex ||
+          (product.colors && product.colors.length > 0
+            ? product.colors[0].hex
+            : ""),
+        price: product.price,
+        quantity: qty,
+      });
+      await existingCartItem.save();
+    }
+
+    const allCartItems = await Cart.find({}).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      code: 200,
+      message: "Đã thêm sản phẩm vào giỏ hàng",
+      data: allCartItems,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
+// POST update cart item quantity
+router.post("/update-cart-quantity", async (req, res) => {
+  try {
+    const { cartItemId, quantity } = req.body;
+    const qty = parseInt(quantity);
+    if (qty <= 0) {
+      await Cart.findByIdAndDelete(cartItemId);
+    } else {
+      await Cart.findByIdAndUpdate(cartItemId, { quantity: qty });
+    }
+    const cartItems = await Cart.find({}).sort({ createdAt: -1 });
+    res.status(200).json({
+      code: 200,
+      message: "Cập nhật số lượng thành công",
+      data: cartItems,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
+// DELETE single item from cart
+router.delete("/delete-cart-item/:id", async (req, res) => {
+  try {
+    await Cart.findByIdAndDelete(req.params.id);
+    const cartItems = await Cart.find({}).sort({ createdAt: -1 });
+    res.status(200).json({
+      code: 200,
+      message: "Xóa sản phẩm khỏi giỏ hàng thành công",
+      data: cartItems,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
 
 // POST create a new product
-router.post("/add-product", async (req, res) => {
+router.post("/add-product", (req, res) =>
+  upload.single("image")(req, res, async (uploadError) => {
+    if (uploadError) {
+      return res.status(400).json({ code: 400, message: uploadError.message, data: null });
+    }
+    try {
+      const { name, price, category, description, stock, colors } = req.body;
+      if (!name || !price || !category || !req.file) {
+        return res.status(400).json({
+          code: 400,
+          message: "Tên, giá, danh mục và hình ảnh là bắt buộc",
+          data: null,
+        });
+      }
+      const image = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+      const parsedColors = colors ? JSON.parse(colors) : [];
+      const savedProduct = await Product.create({
+        name: name.trim(),
+        price: Number(price),
+        image,
+        category: category.trim(),
+        description: description || "",
+        stock: Number(stock) || 0,
+        colors: parsedColors,
+      });
+      res.status(201).json({ code: 201, message: "Thêm sản phẩm thành công", data: savedProduct });
+    } catch (error) {
+      res.status(400).json({ code: 400, message: error.message, data: null });
+    }
+  }),
+);
+
+router.put("/update-product/:id", (req, res) =>
+  upload.single("image")(req, res, async (uploadError) => {
+    if (uploadError) {
+      return res.status(400).json({ code: 400, message: uploadError.message, data: null });
+    }
+    try {
+      const product = await Product.findById(req.params.id);
+      if (!product) {
+        return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm", data: null });
+      }
+      const { name, price, category, description, stock, colors } = req.body;
+      if (!name || !price || !category) {
+        return res.status(400).json({ code: 400, message: "Thiếu thông tin sản phẩm", data: null });
+      }
+      product.name = name.trim();
+      product.price = Number(price);
+      product.category = category.trim();
+      product.description = description || "";
+      product.stock = Number(stock) || 0;
+      if (colors) product.colors = JSON.parse(colors);
+      if (req.file) {
+        product.image = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+      }
+      const updatedProduct = await product.save();
+      res.json({ code: 200, message: "Cập nhật sản phẩm thành công", data: updatedProduct });
+    } catch (error) {
+      res.status(400).json({ code: 400, message: error.message, data: null });
+    }
+  }),
+);
+
+router.get("/search-product", async (req, res) => {
   try {
-    const { name, price, image, category, description } = req.body;
-    const newProduct = new Product({
-      name,
-      price,
-      image,
-      category,
-      description,
-    });
-    const savedProduct = await newProduct.save();
-    res.status(201).json(savedProduct);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 6;
+    const keyword = req.query.keyword || "";
+    const category = String(req.query.category || "").trim();
+    const skip = (page - 1) * limit;
+    const cacheKey = `search:v3:${keyword}:${category}:${page}:${limit}`;
+
+    // Check cache trước
+    const cached = client?.isReady
+      ? await client.get(cacheKey).catch(() => null)
+      : null;
+    if (cached) {
+      return res.json(JSON.parse(cached));
+    }
+
+    const query = {};
+    if (keyword) {
+      query.name = {
+            $regex: keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+            $options: "i",
+      };
+    }
+    if (category) query.category = category;
+
+    const [products, totalProducts] = await Promise.all([
+      Product.find(query).skip(skip).limit(limit),
+      Product.countDocuments(query),
+    ]);
+
+    const result = {
+      code: 200,
+      data: products,
+      message: "Success",
+      pagination: {
+        totalProducts,
+        currentPage: page,
+        totalPages: Math.ceil(totalProducts / limit),
+        limit,
+      },
+    };
+
+    // Cache 5 phút
+    if (client?.isReady) {
+      await client.setEx(cacheKey, 300, JSON.stringify(result)).catch(() => {});
+    }
+
+    res.json(result);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    res.status(500).json({ code: 500, data: null, message: error.message });
+  }
+});
+
+// POST calculate shipping fee quote
+router.post("/shipping-quote", async (req, res) => {
+  try {
+    const { address, provider } = req.body;
+    const cartItems = await Cart.find({});
+    let shippingFee = cartItems.length === 0 ? 0 : 40000;
+
+    const deliveryDate = new Date();
+    deliveryDate.setDate(deliveryDate.getDate() + 3);
+    const estimatedDelivery = deliveryDate.toISOString().split("T")[0];
+
+    res.status(200).json({
+      success: true,
+      code: 200,
+      message: "Tính phí vận chuyển thành công",
+      data: {
+        provider: provider || "GHN",
+        service_id: 53320,
+        service_name: "Giao hàng tiêu chuẩn",
+        shipping_fee: shippingFee,
+        estimated_delivery: estimatedDelivery,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      code: 500,
+      message: error.message,
+      data: null,
+    });
+  }
+});
+
+// POST /api/productsRouter/checkout - Thanh toán giỏ hàng và tạo Đơn hàng
+router.post("/checkout", async (req, res) => {
+  try {
+    const Order = require("../models/Order");
+    const cartItems = await Cart.find({});
+
+    if (cartItems.length === 0) {
+      return res.status(400).json({
+        code: 400,
+        message: "Giỏ hàng của bạn đang trống"
+      });
+    }
+
+    const orderItems = cartItems.map((item) => ({
+      product: item.productId,
+      quantity: item.quantity,
+      price: item.price,
+      color: { id: item.colorId, name: item.colorName }
+    }));
+    const subtotal = cartItems.reduce(
+      (total, item) => total + item.price * item.quantity,
+      0
+    );
+
+    const shippingFee = subtotal === 0 ? 0 : 40000;
+    const totalAmount = subtotal + shippingFee;
+
+    const newOrder = new Order({
+      items: orderItems,
+      subtotal,
+      shippingFee,
+      totalAmount,
+      status: "completed"
+    });
+
+    const savedOrder = await newOrder.save();
+
+    // ponytail: giỏ hàng hiện dùng chung; thêm userId + transaction khi tách giỏ theo tài khoản.
+    await Cart.deleteMany({});
+
+    res.status(200).json({
+      code: 200,
+      message: "Thanh toán đơn hàng thành công!",
+      data: savedOrder
+    });
+  } catch (error) {
+    console.error("Lỗi khi thanh toán đơn hàng:", error);
+    res.status(500).json({
+      code: 500,
+      message: "Lỗi máy chủ khi thanh toán đơn hàng."
+    });
   }
 });
 
