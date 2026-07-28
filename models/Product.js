@@ -41,6 +41,11 @@ const Product = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Trạng thái sản phẩm (active: đang bán, inactive: ngừng bán/ẩn)
+    status: {
+      type: String,
+      default: "active",
+    },
     // Danh sách các biến thể màu sắc sản phẩm
     colors: [
       {

@@ -5,6 +5,9 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/users");
 const { authenticateToken, authorizeRoles } = require("../middlewares/auth");
 const upload = require("../middlewares/upload");
+const ActivityLog = require("../models/ActivityLog");
+const Order = require("../models/Order");
+const Product = require("../models/Product");
 
 // Đăng ký người dùng mới (Mặc định luôn là customer)
 router.post("/register", async (req, res) => {
@@ -103,6 +106,12 @@ router.post("/login", async (req, res) => {
     // Loại bỏ password trước khi trả về
     const userResponse = user.toObject();
     delete userResponse.password;
+
+    try {
+      await recordLoginActivity(user);
+    } catch (logError) {
+      console.error("Không thể ghi log đăng nhập:", logError);
+    }
 
     res.status(200).json({
       code: 200,
@@ -376,6 +385,12 @@ router.get("/admin/revenue-stats", async (req, res) => {
     const Order = require("../models/Order");
     const Product = require("../models/Product");
     const period = parseInt(req.query.period) || 0;
+    const parsedActivityLimit = parseInt(req.query.activityLimit, 10);
+    const activityLimit = req.query.activityLimit === undefined
+      || Number.isNaN(parsedActivityLimit)
+      || parsedActivityLimit < 0
+      ? 6
+      : parsedActivityLimit;
 
     const now = new Date();
     let startDate, endDate;
@@ -461,33 +476,7 @@ router.get("/admin/revenue-stats", async (req, res) => {
       .sort((a, b) => b.soldCount - a.soldCount)
       .slice(0, 3);
 
-    const [recentOrders, recentUsers, lowStockProducts] = await Promise.all([
-      Order.find({ status: { $nin: ["Đã hủy", "cancelled"] } })
-        .populate("user", "name")
-        .sort({ createdAt: -1 })
-        .limit(5),
-      User.find({ role: "customer" }).sort({ createdAt: -1 }).limit(5),
-      Product.find({ stock: { $lte: 10 } }).sort({ stock: 1, updatedAt: -1 }).limit(5),
-    ]);
-    const recentActivities = [
-      ...recentOrders.map((order) => ({
-        type: "order",
-        title: `${order.user?.name || order.receiverName || "Khách hàng"} vừa mua hàng`,
-        createdAt: order.createdAt,
-      })),
-      ...recentUsers.map((user) => ({
-        type: "user",
-        title: `${user.name} vừa đăng ký tài khoản`,
-        createdAt: user.createdAt,
-      })),
-      ...lowStockProducts.map((product) => ({
-        type: "low_stock",
-        title: `${product.name} sắp hết hàng (còn ${product.stock})`,
-        createdAt: product.updatedAt,
-      })),
-    ]
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, 6);
+    const recentActivities = await buildRecentActivities(activityLimit);
 
     res.status(200).json({
       code: 200,
@@ -593,89 +582,6 @@ router.get("/get-user-by-id/:id", async (req, res) => {
   }
 });
 
-// Lấy danh sách toàn bộ người dùng
-router.get("/get-all-users", authenticateToken, async (req, res) => {
-  try {
-    const users = await User.find({}).sort({ createdAt: -1 });
-    return res.status(200).json({
-      code: 200,
-      message: "Lấy danh sách người dùng thành công",
-      data: users
-    });
-  } catch (error) {
-    return res.status(500).json({
-      code: 500,
-      message: "Lỗi máy chủ khi lấy danh sách người dùng.",
-      error: error.message
-    });
-  }
-});
-
-// Thêm người dùng mới (dành cho Admin/Super Admin)
-router.post("/add-user", authenticateToken, async (req, res) => {
-  try {
-    const { name, email, phone, role, password, address, image } = req.body;
-    if (!name || !email || !phone || !password) {
-      return res.status(400).json({
-        code: 400,
-        message: "Thiếu thông tin bắt buộc (họ tên, email, SĐT, mật khẩu)."
-      });
-    }
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({
-        code: 400,
-        message: "Email đã tồn tại trên hệ thống."
-      });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    const newUser = new User({
-      name,
-      email,
-      phone,
-      role: role || "customer",
-      password: hashedPassword,
-      address: address || "",
-      image: image || ""
-    });
-
-    const savedUser = await newUser.save();
-    const userResponse = savedUser.toObject();
-    delete userResponse.password;
-
-    return res.status(201).json({
-      code: 201,
-      message: "Thêm người dùng thành công",
-      data: userResponse
-    });
-  } catch (error) {
-    return res.status(500).json({
-      code: 500,
-      message: "Lỗi máy chủ khi thêm người dùng.",
-      error: error.message
-    });
-  }
-});
-
-// GET user by ID
-router.get("/get-user-by-id/:id", async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng", data: null });
-    }
-    const userObj = user.toObject();
-    delete userObj.password;
-    res.status(200).json({ code: 200, message: "Lấy thông tin người dùng thành công", data: userObj });
-  } catch (error) {
-    res.status(500).json({ code: 500, message: error.message, data: null });
-  }
-});
-
 router.post("/logout", authenticateToken, async (req, res) => {
   try {
     res.status(200).json({
@@ -690,4 +596,120 @@ router.post("/logout", authenticateToken, async (req, res) => {
     });
   }
 });
+// ==========================================
+// THỐNG KÊ HOẠT ĐỘNG GẦN ĐÂY (RECENT ACTIVITIES)
+// ==========================================
+
+// Định dạng tiền tệ VND
+const formatVND = (val) => `${new Intl.NumberFormat("vi-VN").format(val || 0)} VND`;
+
+// Hàm chuyển đổi ngày sang ISOString an toàn tránh crash RangeError
+const toISOSafe = (date) => {
+  if (!date) return new Date().toISOString();
+  const d = new Date(date);
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+};
+
+// Hàm ghi nhận lịch sử đăng nhập
+async function recordLoginActivity(user) {
+  if (!user) return;
+  const role = String(user.role || "").replace(/\s+/g, "").toLowerCase();
+  const isAdmin = role === "admin" || role === "superadmin";
+  await ActivityLog.create({
+    type: isAdmin ? "login_admin" : "login_customer",
+    title: `${user.name} vừa đăng nhập`,
+    detail: `Vai trò: ${user.role || "Customer"}`,
+    targetId: String(user._id),
+    actorName: user.name || "",
+    actorRole: user.role || "Customer",
+    eventAt: new Date(),
+  });
+}
+
+// Hàm xây dựng danh sách hoạt động gần đây
+async function buildRecentActivities(limit = 10) {
+  // Lấy dữ liệu từ DB song song để tối ưu hiệu năng
+  const [orders, products, users, loginLogs] = await Promise.all([
+    Order.find({}).populate("user", "name role").sort({ createdAt: -1 }),
+    Product.find({}).sort({ createdAt: -1 }),
+    User.find({}).sort({ createdAt: -1 }),
+    ActivityLog.find({ type: { $in: ["login_admin", "login_customer"] } }).sort({ eventAt: -1 }),
+  ]);
+
+  const activities = [];
+
+  // 1. Duyệt danh sách đơn hàng
+  orders.forEach(order => {
+    const code = order.orderCode || `#${String(order._id).slice(-6)}`;
+    const itemsCount = (order.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0);
+    const amount = order.totalAmount ?? order.totalPrice ?? 0;
+    const name = order.user?.name || order.receiverName || "Khách hàng";
+    const detail = `${name} · ${itemsCount} sản phẩm · ${formatVND(amount)}`;
+
+    let type = "order_created";
+    let title = `Đơn hàng ${code} đã được tạo`;
+    let time = order.createdAt;
+
+    if (["Đã hủy", "cancelled"].includes(order.status)) {
+      type = "order_cancelled";
+      title = `Đơn hàng ${code} đã bị hủy`;
+      time = order.updatedAt || order.createdAt;
+    } else if (["Đã giao hàng", "Đã hoàn thành"].includes(order.status)) {
+      type = "order_completed";
+      title = `Đơn hàng ${code} đã hoàn thành`;
+      time = order.completedAt || order.updatedAt || order.createdAt;
+    }
+
+    activities.push({ type, title, detail, createdAt: toISOSafe(time), targetId: String(order._id) });
+  });
+
+  // 2. Duyệt danh sách sản phẩm mới
+  products.forEach(p => {
+    activities.push({
+      type: "product_created",
+      title: `Sản phẩm mới: ${p.name}`,
+      detail: `Mã: ${String(p._id).slice(-6)} · Danh mục: ${p.category || "Chưa phân loại"} · Tồn kho: ${p.stock ?? 0}`,
+      createdAt: toISOSafe(p.createdAt),
+      targetId: String(p._id)
+    });
+  });
+
+  // 3. Duyệt danh sách người dùng mới
+  users.forEach(u => {
+    activities.push({
+      type: "user_created",
+      title: `Người dùng mới: ${u.name}`,
+      detail: `Vai trò: ${u.role || "customer"}`,
+      createdAt: toISOSafe(u.createdAt),
+      targetId: String(u._id)
+    });
+  });
+
+  // 4. Duyệt danh sách hoạt động đăng nhập
+  loginLogs.forEach(log => {
+    const role = String(log.actorRole || "").replace(/\s+/g, "").toLowerCase();
+    const roleLabel = role === "admin" || role === "superadmin" ? "Quản trị viên" : "Khách hàng";
+    activities.push({
+      type: log.type,
+      title: `${roleLabel} ${log.actorName || "vừa"} đăng nhập`,
+      detail: `Vai trò: ${log.actorRole || "Customer"}`,
+      createdAt: toISOSafe(log.eventAt || log.createdAt),
+      targetId: log.targetId || ""
+    });
+  });
+
+  // Loại bỏ các hoạt động trùng lặp (Deduplicate)
+  const seen = new Set();
+  const deduped = activities.filter(act => {
+    const key = `${act.type}|${act.targetId}|${act.createdAt}|${act.title}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Sắp xếp theo thời gian mới nhất và cắt theo giới hạn giới hạn nếu limit > 0
+  const sorted = deduped.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  return limit > 0 ? sorted.slice(0, limit) : sorted;
+}
+
 module.exports = router;

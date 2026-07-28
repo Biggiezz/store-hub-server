@@ -306,17 +306,7 @@ router.post("/update-status", async (req, res) => {
       return res.status(400).json({ code: 400, message: "Thiếu mã đơn hàng hoặc trạng thái" });
     }
 
-    const updateFields = { status };
-    const now = new Date();
-    if (status === "Đã xác nhận") {
-      updateFields.confirmedAt = now;
-    } else if (status === "Đã rời kho") {
-      updateFields.warehouseAt = now;
-    } else if (status === "Đang giao hàng") {
-      updateFields.deliveringAt = now;
-    } else if (status === "Đã giao hàng" || status === "Đã hoàn thành") {
-      updateFields.completedAt = now;
-    }
+    const updateFields = { status, ...getStatusTimestamp(status) };
 
     const result = await Order.updateOne(
       { _id: orderId },
