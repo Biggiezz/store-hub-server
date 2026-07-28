@@ -65,6 +65,20 @@ router.get("/get-all-product", async (req, res) => {
   }
 });
 
+// GET list of active unique categories from products
+router.get("/get-categories", async (req, res) => {
+  try {
+    const categories = await Product.distinct("category");
+    res.status(200).json({
+      code: 200,
+      message: "Lấy danh sách danh mục thành công",
+      data: categories,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
 // GET 4 latest products
 router.get("/get-latest-product", async (req, res) => {
   try {
