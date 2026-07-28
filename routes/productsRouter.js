@@ -342,7 +342,7 @@ router.post("/add-product", (req, res) =>
           data: null,
         });
       }
-      const image = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+      const image = req.file.path;
       const parsedColors = colors ? JSON.parse(colors) : [];
       const savedProduct = await Product.create({
         name: name.trim(),
@@ -383,7 +383,7 @@ router.put("/update-product/:id", (req, res) =>
       if (status !== undefined) product.status = status;
       if (colors) product.colors = JSON.parse(colors);
       if (req.file) {
-        product.image = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+        product.image = req.file.path;
       }
       const updatedProduct = await product.save();
       res.json({ code: 200, message: "Cập nhật sản phẩm thành công", data: updatedProduct });
