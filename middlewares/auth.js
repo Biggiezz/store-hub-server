@@ -24,6 +24,15 @@ const authenticateToken = (req, res, next) => {
       });
     }
     req.user = user;
+
+    // Cập nhật lastActive và set isOnline = true bất đồng bộ mà không chặn luồng chính
+    if (user && user.id) {
+      const User = require("../models/users");
+      User.findByIdAndUpdate(user.id, { lastActive: new Date(), isOnline: true }).catch((err) => {
+        console.error("Error updating lastActive in middleware:", err);
+      });
+    }
+
     next();
   });
 };

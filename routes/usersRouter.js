@@ -96,6 +96,11 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    // Cập nhật lastActive và isOnline khi đăng nhập thành công
+    user.lastActive = new Date();
+    user.isOnline = true;
+    await user.save();
+
     // Tạo JWT token
     const token = jwt.sign(
       { id: user._id, role: user.role },
@@ -584,6 +589,9 @@ router.get("/get-user-by-id/:id", async (req, res) => {
 
 router.post("/logout", authenticateToken, async (req, res) => {
   try {
+    if (req.user && req.user.id) {
+      await User.findByIdAndUpdate(req.user.id, { isOnline: false, lastActive: new Date() });
+    }
     res.status(200).json({
       code: 200,
       message: "Đăng xuất thành công."
@@ -711,5 +719,68 @@ async function buildRecentActivities(limit = 10) {
   const sorted = deduped.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   return limit > 0 ? sorted.slice(0, limit) : sorted;
 }
+
+
+// Thiết lập trạng thái ngoại tuyến (khi vuốt thoát app)
+router.post("/set-offline", authenticateToken, async (req, res) => {
+  try {
+    if (req.user && req.user.id) {
+      await User.findByIdAndUpdate(req.user.id, { isOnline: false, lastActive: new Date() });
+    }
+    res.status(200).json({
+      code: 200,
+      message: "Đã thiết lập trạng thái ngoại tuyến."
+    });
+  } catch (error) {
+    res.status(500).json({
+      code: 500,
+      message: "Lỗi khi thiết lập trạng thái ngoại tuyến.",
+      error: error.message
+    });
+  }
+});
+
+// Cập nhật thông tin người dùng bất kỳ (Chỉ có Super Admin mới có quyền thực hiện)
+router.put("/update-user/:id", authenticateToken, authorizeRoles("superadmin"), async (req, res) => {
+  try {
+    const { name, email, phone, role, password, address, image } = req.body;
+    const userToUpdate = await User.findById(req.params.id);
+    if (!userToUpdate) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng." });
+    }
+
+    if (name !== undefined) userToUpdate.name = name;
+    if (email !== undefined) {
+      if (email !== userToUpdate.email) {
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+          return res.status(400).json({ code: 400, message: "Email đã tồn tại trên hệ thống." });
+        }
+      }
+      userToUpdate.email = email;
+    }
+    if (phone !== undefined) userToUpdate.phone = phone;
+    if (role !== undefined) userToUpdate.role = role;
+    if (address !== undefined) userToUpdate.address = address;
+    if (image !== undefined) userToUpdate.image = image;
+
+    if (password && password.trim() !== "") {
+      const salt = await bcrypt.genSalt(10);
+      userToUpdate.password = await bcrypt.hash(password, salt);
+    }
+
+    const savedUser = await userToUpdate.save();
+    const userResponse = savedUser.toObject();
+    delete userResponse.password;
+
+    res.status(200).json({
+      code: 200,
+      message: "Cập nhật người dùng thành công",
+      data: userResponse
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
 
 module.exports = router;
