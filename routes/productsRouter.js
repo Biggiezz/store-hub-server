@@ -8,16 +8,6 @@ const upload = require("../middlewares/upload");
 const redis = require("redis");
 let client = null;
 
-// --- Code gốc của team (được comment lại để tham chiếu) ---
-// if (client) {
-//   client.on("error", (error) => console.error(`Redis error: ${error.message}`));
-//   client
-//     .connect()
-//     .catch((error) =>
-//       console.error(`Redis connection failed: ${error.message}`),
-//     );
-// }
-
 // --- Code xử lý Redis an toàn cho máy local (tự động chuyển sang MongoDB nếu chưa bật Redis) ---
 if (process.env.REDIS_URL) {
   client = redis.createClient({
@@ -129,7 +119,6 @@ router.post("/add-review", async (req, res) => {
 
     // Check if order was already reviewed
     if (orderId) {
-      const Order = require("../models/Order");
       const order = await Order.findById(orderId);
       if (order && order.isReviewed) {
         return res
@@ -165,7 +154,6 @@ router.post("/add-review", async (req, res) => {
     await product.save();
 
     if (orderId) {
-      const Order = require("../models/Order");
       await Order.findByIdAndUpdate(orderId, { isReviewed: true });
     }
 
@@ -346,7 +334,7 @@ router.post("/add-product", (req, res) =>
       return res.status(400).json({ code: 400, message: uploadError.message, data: null });
     }
     try {
-      const { name, price, category, description, stock, colors } = req.body;
+      const { name, price, category, description, stock, colors, status } = req.body;
       if (!name || !price || !category || !req.file) {
         return res.status(400).json({
           code: 400,
@@ -364,6 +352,7 @@ router.post("/add-product", (req, res) =>
         description: description || "",
         stock: Number(stock) || 0,
         colors: parsedColors,
+        status: status || "active",
       });
       res.status(201).json({ code: 201, message: "Thêm sản phẩm thành công", data: savedProduct });
     } catch (error) {
@@ -382,7 +371,7 @@ router.put("/update-product/:id", (req, res) =>
       if (!product) {
         return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm", data: null });
       }
-      const { name, price, category, description, stock, colors } = req.body;
+      const { name, price, category, description, stock, colors, status } = req.body;
       if (!name || !price || !category) {
         return res.status(400).json({ code: 400, message: "Thiếu thông tin sản phẩm", data: null });
       }
@@ -391,6 +380,7 @@ router.put("/update-product/:id", (req, res) =>
       product.category = category.trim();
       product.description = description || "";
       product.stock = Number(stock) || 0;
+      if (status !== undefined) product.status = status;
       if (colors) product.colors = JSON.parse(colors);
       if (req.file) {
         product.image = req.file.path;
