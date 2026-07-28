@@ -199,8 +199,8 @@ router.put("/update-avatar", authenticateToken, (req, res) => {
         });
       }
 
-      // Đường dẫn tĩnh của ảnh sau khi upload lên server
-      const imageUrl = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+      // Đường dẫn ảnh trên Cloudinary sau khi upload
+      const imageUrl = req.file.path;
 
       // Tìm và cập nhật ảnh của user
       const updatedUser = await User.findByIdAndUpdate(
@@ -236,43 +236,57 @@ router.put("/update-avatar", authenticateToken, (req, res) => {
   });
 });
 
-// Cập nhật thông tin cá nhân (name, phone, address) - Không cập nhật email
-router.put("/update-profile", authenticateToken, async (req, res) => {
-  try {
-    const { name, phone, address } = req.body;
-    const updates = {};
-    if (name !== undefined) updates.name = name;
-    if (phone !== undefined) updates.phone = phone;
-    if (address !== undefined) updates.address = address;
-
-    const updatedUser = await User.findByIdAndUpdate(
-      req.user.id,
-      updates,
-      { new: true }
-    );
-
-    if (!updatedUser) {
-      return res.status(404).json({
-        code: 404,
-        message: "Không tìm thấy người dùng."
+// Cập nhật thông tin cá nhân (name, phone, address, image) - Không cập nhật email
+router.put("/update-profile", authenticateToken, (req, res) => {
+  upload.single("image")(req, res, async function (err) {
+    if (err) {
+      return res.status(400).json({
+        code: 400,
+        message: err.message || "Lỗi tải ảnh lên."
       });
     }
 
-    const userResponse = updatedUser.toObject();
-    delete userResponse.password;
+    try {
+      const { name, phone, address } = req.body;
+      const updates = {};
+      if (name !== undefined) updates.name = name;
+      if (phone !== undefined) updates.phone = phone;
+      if (address !== undefined) updates.address = address;
 
-    res.status(200).json({
-      code: 200,
-      message: "Cập nhật thông tin cá nhân thành công",
-      data: userResponse
-    });
-  } catch (error) {
-    res.status(500).json({
-      code: 500,
-      message: "Lỗi máy chủ khi cập nhật thông tin cá nhân.",
-      error: error.message
-    });
-  }
+      // Nếu có file ảnh được upload, lưu URL Cloudinary
+      if (req.file) {
+        updates.image = req.file.path;
+      }
+
+      const updatedUser = await User.findByIdAndUpdate(
+        req.user.id,
+        updates,
+        { new: true }
+      );
+
+      if (!updatedUser) {
+        return res.status(404).json({
+          code: 404,
+          message: "Không tìm thấy người dùng."
+        });
+      }
+
+      const userResponse = updatedUser.toObject();
+      delete userResponse.password;
+
+      res.status(200).json({
+        code: 200,
+        message: "Cập nhật thông tin cá nhân thành công",
+        data: userResponse
+      });
+    } catch (error) {
+      res.status(500).json({
+        code: 500,
+        message: "Lỗi máy chủ khi cập nhật thông tin cá nhân.",
+        error: error.message
+      });
+    }
+  });
 });
 
 // Đổi mật khẩu (oldPassword, newPassword) - cập nhật changePasswordDate
