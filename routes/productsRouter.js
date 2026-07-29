@@ -50,7 +50,13 @@ router.get("/get-all-product", async (req, res) => {
 
     // Lấy tổng số lượng sản phẩm để Client biết khi nào hết sản phẩm
     const category = String(req.query.category || "").trim();
+    const showInactive = req.query.showInactive === 'true';
     const query = category ? { category } : {};
+
+    if (!showInactive) {
+      query.isActive = { $ne: false };
+    }
+
     const totalProducts = await Product.countDocuments(query);
 
     // Lấy danh sách sản phẩm theo page và limit (sắp xếp mới nhất lên đầu để đảm bảo tính nhất quán khi phân trang)
@@ -78,7 +84,7 @@ router.get("/get-all-product", async (req, res) => {
 // GET 4 latest products
 router.get("/get-latest-product", async (req, res) => {
   try {
-    const latestProducts = await Product.find({})
+    const latestProducts = await Product.find({ isActive: { $ne: false } })
       .sort({ createdAt: -1 })
       .limit(4);
     res.status(200).json({
@@ -346,7 +352,7 @@ router.post("/add-product", (req, res) =>
       return res.status(400).json({ code: 400, message: uploadError.message, data: null });
     }
     try {
-      const { name, price, category, description, stock, colors } = req.body;
+      const { name, price, category, description, stock, colors, isActive, soldQuantity, rating } = req.body;
       if (!name || !price || !category || !req.file) {
         return res.status(400).json({
           code: 400,
@@ -363,8 +369,18 @@ router.post("/add-product", (req, res) =>
         category: category.trim(),
         description: description || "",
         stock: Number(stock) || 0,
+        soldQuantity: Number(soldQuantity) || 0,
+        rating: Number(rating) || 0,
         colors: parsedColors,
+        isActive: isActive !== undefined ? isActive === 'true' || isActive === true : true,
       });
+
+      // Clear search cache
+      if (client?.isReady) {
+        const keys = await client.keys("search:v3:*");
+        if (keys.length > 0) await client.del(keys);
+      }
+
       res.status(201).json({ code: 201, message: "Thêm sản phẩm thành công", data: savedProduct });
     } catch (error) {
       res.status(400).json({ code: 400, message: error.message, data: null });
@@ -382,7 +398,7 @@ router.put("/update-product/:id", (req, res) =>
       if (!product) {
         return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm", data: null });
       }
-      const { name, price, category, description, stock, colors } = req.body;
+      const { name, price, category, description, stock, colors, isActive, soldQuantity, rating } = req.body;
       if (!name || !price || !category) {
         return res.status(400).json({ code: 400, message: "Thiếu thông tin sản phẩm", data: null });
       }
@@ -391,11 +407,21 @@ router.put("/update-product/:id", (req, res) =>
       product.category = category.trim();
       product.description = description || "";
       product.stock = Number(stock) || 0;
+      if (isActive !== undefined) product.isActive = isActive === 'true' || isActive === true;
+      if (soldQuantity !== undefined) product.soldQuantity = Number(soldQuantity);
+      if (rating !== undefined) product.rating = Number(rating);
       if (colors) product.colors = JSON.parse(colors);
       if (req.file) {
         product.image = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
       }
       const updatedProduct = await product.save();
+
+      // Clear search cache
+      if (client?.isReady) {
+        const keys = await client.keys("search:v3:*");
+        if (keys.length > 0) await client.del(keys);
+      }
+
       res.json({ code: 200, message: "Cập nhật sản phẩm thành công", data: updatedProduct });
     } catch (error) {
       res.status(400).json({ code: 400, message: error.message, data: null });
@@ -409,8 +435,9 @@ router.get("/search-product", async (req, res) => {
     const limit = parseInt(req.query.limit) || 6;
     const keyword = req.query.keyword || "";
     const category = String(req.query.category || "").trim();
+    const showInactive = req.query.showInactive === 'true';
     const skip = (page - 1) * limit;
-    const cacheKey = `search:v3:${keyword}:${category}:${page}:${limit}`;
+    const cacheKey = `search:v3:${keyword}:${category}:${page}:${limit}:${showInactive}`;
 
     // Check cache trước
     const cached = client?.isReady
@@ -421,6 +448,9 @@ router.get("/search-product", async (req, res) => {
     }
 
     const query = {};
+    if (!showInactive) {
+      query.isActive = { $ne: false };
+    }
     if (keyword) {
       query.name = {
             $regex: keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
@@ -430,7 +460,7 @@ router.get("/search-product", async (req, res) => {
     if (category) query.category = category;
 
     const [products, totalProducts] = await Promise.all([
-      Product.find(query).skip(skip).limit(limit),
+      Product.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
       Product.countDocuments(query),
     ]);
 
@@ -526,6 +556,16 @@ router.post("/checkout", async (req, res) => {
     });
 
     const savedOrder = await newOrder.save();
+
+    // Cập nhật tồn kho và số lượng đã bán cho từng sản phẩm
+    for (const item of cartItems) {
+      await Product.findByIdAndUpdate(item.productId, {
+        $inc: {
+          stock: -item.quantity,
+          soldQuantity: item.quantity
+        }
+      });
+    }
 
     // ponytail: giỏ hàng hiện dùng chung; thêm userId + transaction khi tách giỏ theo tài khoản.
     await Cart.deleteMany({});
