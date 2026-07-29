@@ -40,7 +40,13 @@ router.get("/get-all-product", async (req, res) => {
 
     // Lấy tổng số lượng sản phẩm để Client biết khi nào hết sản phẩm
     const category = String(req.query.category || "").trim();
-    const query = category ? { category } : {};
+    const status = String(req.query.status || "").trim();
+    const query = status
+      ? status === "active"
+        ? { $or: [{ status: "active" }, { status: { $exists: false } }] }
+        : { status }
+      : { status: { $nin: ["inactive", "Ngừng bán", "hidden"] } };
+    if (category) query.category = category;
     const totalProducts = await Product.countDocuments(query);
 
     // Lấy danh sách sản phẩm theo page và limit (sắp xếp mới nhất lên đầu để đảm bảo tính nhất quán khi phân trang)
@@ -62,6 +68,22 @@ router.get("/get-all-product", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+// GET list of active unique categories from products
+router.get("/get-categories", async (req, res) => {
+  try {
+    const categories = await Product.distinct("category", {
+      status: { $nin: ["inactive", "Ngừng bán", "hidden"] },
+    });
+    res.status(200).json({
+      code: 200,
+      message: "Lấy danh sách danh mục thành công",
+      data: categories,
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
   }
 });
 
@@ -399,8 +421,9 @@ router.get("/search-product", async (req, res) => {
     const limit = parseInt(req.query.limit) || 6;
     const keyword = req.query.keyword || "";
     const category = String(req.query.category || "").trim();
+    const status = String(req.query.status || "").trim();
     const skip = (page - 1) * limit;
-    const cacheKey = `search:v3:${keyword}:${category}:${page}:${limit}`;
+    const cacheKey = `search:v4:${keyword}:${category}:${status}:${page}:${limit}`;
 
     // Check cache trước
     const cached = client?.isReady
@@ -410,7 +433,11 @@ router.get("/search-product", async (req, res) => {
       return res.json(JSON.parse(cached));
     }
 
-    const query = {};
+    const query = status
+      ? status === "active"
+        ? { $or: [{ status: "active" }, { status: { $exists: false } }] }
+        : { status }
+      : { status: { $nin: ["inactive", "Ngừng bán", "hidden"] } };
     if (keyword) {
       query.name = {
             $regex: keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),

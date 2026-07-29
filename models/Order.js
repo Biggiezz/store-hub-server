@@ -72,6 +72,12 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 40000,
     },
+    // Phương thức khách hàng chọn khi thanh toán.
+    paymentMethod: {
+      type: String,
+      enum: ["ZaloPay", "COD"],
+      default: "COD",
+    },
     // Họ tên người nhận hàng
     receiverName: {
       type: String,

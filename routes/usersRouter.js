@@ -651,9 +651,8 @@ router.post("/logout", authenticateToken, async (req, res) => {
     }
     res.status(200).json({
       code: 200,
-      message: "Lấy danh sách người dùng thành công",
-      data: users,
       message: "Đăng xuất thành công.",
+      data: null,
     });
   } catch (error) {
     res.status(500).json({
@@ -700,7 +699,10 @@ async function recordLoginActivity(user) {
 async function buildRecentActivities(limit = 10) {
   // Lấy dữ liệu từ DB song song để tối ưu hiệu năng
   const [orders, products, users, loginLogs] = await Promise.all([
-    Order.find({}).populate("user", "name role").sort({ createdAt: -1 }),
+    Order.find({})
+      .populate("user", "name role phone")
+      .populate("items.product", "name image price category")
+      .sort({ createdAt: -1 }),
     Product.find({}).sort({ createdAt: -1 }),
     User.find({}).sort({ createdAt: -1 }),
     ActivityLog.find({
@@ -720,6 +722,15 @@ async function buildRecentActivities(limit = 10) {
     const amount = order.totalAmount ?? order.totalPrice ?? 0;
     const name = order.user?.name || order.receiverName || "Khách hàng";
     const detail = `${name} · ${itemsCount} sản phẩm · ${formatVND(amount)}`;
+    const products = (order.items || []).map((item) => ({
+      productId: String(item.product?._id || item.productId || item.product || ""),
+      productName: item.productName || item.product?.name || "Sản phẩm",
+      productImage: item.productImage || item.product?.image || "",
+      colorId: item.colorId || "",
+      colorName: item.colorName || "",
+      price: item.price || item.product?.price || 0,
+      quantity: item.quantity || 1,
+    }));
 
     let type = "order_created";
     let title = `Đơn hàng ${code} đã được tạo`;
@@ -741,6 +752,11 @@ async function buildRecentActivities(limit = 10) {
       detail,
       createdAt: toISOSafe(time),
       targetId: String(order._id),
+      customerName: name,
+      customerPhone: order.receiverPhone || order.user?.phone || "",
+      paymentMethod: order.paymentMethod || "Thanh toán khi nhận hàng",
+      totalAmount: amount,
+      products,
     });
   });
 
@@ -864,15 +880,15 @@ router.put(
       const userResponse = savedUser.toObject();
       delete userResponse.password;
 
-      return res.status(201).json({
-        code: 201,
-        message: "Thêm người dùng thành công",
+      return res.status(200).json({
+        code: 200,
+        message: "Cập nhật thông tin người dùng thành công.",
         data: userResponse,
       });
     } catch (error) {
       return res.status(500).json({
         code: 500,
-        message: "Lỗi máy chủ khi thêm người dùng.",
+        message: "Lỗi máy chủ khi cập nhật thông tin người dùng.",
         error: error.message,
       });
     }
@@ -899,22 +915,6 @@ router.get("/get-user-by-id/:id", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message, data: null });
-  }
-});
-
-router.post("/logout", authenticateToken, async (req, res) => {
-  try {
-    res.status(200).json({
-      code: 200,
-      data: userResponse,
-      message: "Đăng xuất thành công.",
-    });
-  } catch (error) {
-    res.status(500).json({
-      code: 500,
-      message: "Lỗi máy chủ khi đăng xuất.",
-      error: error.message,
-    });
   }
 });
 module.exports = router;

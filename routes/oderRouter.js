@@ -72,6 +72,9 @@ function getStatusTimestamp(status) {
 router.post("/create-order", async (req, res) => {
   try {
     const userId = req.query.userId || req.body.userId;
+    const paymentMethod = (req.query.paymentMethod || req.body.paymentMethod) === "ZaloPay"
+      ? "ZaloPay"
+      : "COD";
     const cartItems = await Cart.find({});
     if (cartItems.length === 0) {
       return res.status(400).json({ code: 400, message: "Giỏ hàng đang trống" });
@@ -104,6 +107,7 @@ router.post("/create-order", async (req, res) => {
       totalAmount: totalPrice + 40000,
       status: "Chờ xác nhận",
       shippingFee: 40000,
+      paymentMethod,
       user: userId || null,
       receiverName: userDoc ? userDoc.name : "",
       receiverPhone: userDoc ? userDoc.phone : "",
