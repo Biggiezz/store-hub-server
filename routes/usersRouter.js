@@ -700,7 +700,10 @@ async function recordLoginActivity(user) {
 async function buildRecentActivities(limit = 10) {
   // Lấy dữ liệu từ DB song song để tối ưu hiệu năng
   const [orders, products, users, loginLogs] = await Promise.all([
-    Order.find({}).populate("user", "name role").sort({ createdAt: -1 }),
+    Order.find({})
+      .populate("user", "name role phone")
+      .populate("items.product", "name image price category")
+      .sort({ createdAt: -1 }),
     Product.find({}).sort({ createdAt: -1 }),
     User.find({}).sort({ createdAt: -1 }),
     ActivityLog.find({
@@ -720,6 +723,15 @@ async function buildRecentActivities(limit = 10) {
     const amount = order.totalAmount ?? order.totalPrice ?? 0;
     const name = order.user?.name || order.receiverName || "Khách hàng";
     const detail = `${name} · ${itemsCount} sản phẩm · ${formatVND(amount)}`;
+    const products = (order.items || []).map((item) => ({
+      productId: String(item.product?._id || item.productId || item.product || ""),
+      productName: item.productName || item.product?.name || "Sản phẩm",
+      productImage: item.productImage || item.product?.image || "",
+      colorId: item.colorId || "",
+      colorName: item.colorName || "",
+      price: item.price || item.product?.price || 0,
+      quantity: item.quantity || 1,
+    }));
 
     let type = "order_created";
     let title = `Đơn hàng ${code} đã được tạo`;
@@ -741,6 +753,11 @@ async function buildRecentActivities(limit = 10) {
       detail,
       createdAt: toISOSafe(time),
       targetId: String(order._id),
+      customerName: name,
+      customerPhone: order.receiverPhone || order.user?.phone || "",
+      paymentMethod: order.paymentMethod || "Thanh toán khi nhận hàng",
+      totalAmount: amount,
+      products,
     });
   });
 
