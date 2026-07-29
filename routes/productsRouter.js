@@ -40,7 +40,10 @@ router.get("/get-all-product", async (req, res) => {
 
     // Lấy tổng số lượng sản phẩm để Client biết khi nào hết sản phẩm
     const category = String(req.query.category || "").trim();
-    const query = category ? { category } : {};
+    const query = {
+      status: { $nin: ["inactive", "Ngừng bán", "hidden"] },
+    };
+    if (category) query.category = category;
     const totalProducts = await Product.countDocuments(query);
 
     // Lấy danh sách sản phẩm theo page và limit (sắp xếp mới nhất lên đầu để đảm bảo tính nhất quán khi phân trang)
@@ -400,7 +403,7 @@ router.get("/search-product", async (req, res) => {
     const keyword = req.query.keyword || "";
     const category = String(req.query.category || "").trim();
     const skip = (page - 1) * limit;
-    const cacheKey = `search:v3:${keyword}:${category}:${page}:${limit}`;
+    const cacheKey = `search:v4:${keyword}:${category}:${page}:${limit}`;
 
     // Check cache trước
     const cached = client?.isReady
@@ -410,7 +413,9 @@ router.get("/search-product", async (req, res) => {
       return res.json(JSON.parse(cached));
     }
 
-    const query = {};
+    const query = {
+      status: { $nin: ["inactive", "Ngừng bán", "hidden"] },
+    };
     if (keyword) {
       query.name = {
             $regex: keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
