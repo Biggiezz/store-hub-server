@@ -651,9 +651,8 @@ router.post("/logout", authenticateToken, async (req, res) => {
     }
     res.status(200).json({
       code: 200,
-      message: "Lấy danh sách người dùng thành công",
-      data: users,
       message: "Đăng xuất thành công.",
+      data: null,
     });
   } catch (error) {
     res.status(500).json({
@@ -864,15 +863,15 @@ router.put(
       const userResponse = savedUser.toObject();
       delete userResponse.password;
 
-      return res.status(201).json({
-        code: 201,
-        message: "Thêm người dùng thành công",
+      return res.status(200).json({
+        code: 200,
+        message: "Cập nhật thông tin người dùng thành công.",
         data: userResponse,
       });
     } catch (error) {
       return res.status(500).json({
         code: 500,
-        message: "Lỗi máy chủ khi thêm người dùng.",
+        message: "Lỗi máy chủ khi cập nhật thông tin người dùng.",
         error: error.message,
       });
     }
@@ -899,22 +898,6 @@ router.get("/get-user-by-id/:id", async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message, data: null });
-  }
-});
-
-router.post("/logout", authenticateToken, async (req, res) => {
-  try {
-    res.status(200).json({
-      code: 200,
-      data: userResponse,
-      message: "Đăng xuất thành công.",
-    });
-  } catch (error) {
-    res.status(500).json({
-      code: 500,
-      message: "Lỗi máy chủ khi đăng xuất.",
-      error: error.message,
-    });
   }
 });
 module.exports = router;

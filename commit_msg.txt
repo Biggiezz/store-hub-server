@@ -1,0 +1,6 @@
+Cập nhật bộ lọc status cho API lấy danh sách sản phẩm và tìm kiếm
+
+[Chi tiết thay đổi phía Server]:
+- Cập nhật API /get-all-product và /search-product hỗ trợ nhận tham số query 'status'.
+- Xử lý lỗi cơ chế Default của MongoDB: Sử dụng toán tử $or và $exists để truy vấn cả các bản ghi cũ chưa được bổ sung thuộc tính 'status' trong database (coi như mặc định là active).
+- Đưa tham số status vào cacheKey của tìm kiếm sản phẩm để tránh xung đột dữ liệu cache giữa Admin và Khách hàng.

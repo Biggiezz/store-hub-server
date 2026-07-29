@@ -40,7 +40,21 @@ router.get("/get-all-product", async (req, res) => {
 
     // Lấy tổng số lượng sản phẩm để Client biết khi nào hết sản phẩm
     const category = String(req.query.category || "").trim();
-    const query = category ? { category } : {};
+    const status = String(req.query.status || "").trim();
+    
+    const query = {};
+    if (category) query.category = category;
+    if (status) {
+      if (status === "active") {
+        query.$or = [
+          { status: "active" },
+          { status: { $exists: false } }
+        ];
+      } else {
+        query.status = status;
+      }
+    }
+    
     const totalProducts = await Product.countDocuments(query);
 
     // Lấy danh sách sản phẩm theo page và limit (sắp xếp mới nhất lên đầu để đảm bảo tính nhất quán khi phân trang)
@@ -413,8 +427,9 @@ router.get("/search-product", async (req, res) => {
     const limit = parseInt(req.query.limit) || 6;
     const keyword = req.query.keyword || "";
     const category = String(req.query.category || "").trim();
+    const status = String(req.query.status || "").trim();
     const skip = (page - 1) * limit;
-    const cacheKey = `search:v3:${keyword}:${category}:${page}:${limit}`;
+    const cacheKey = `search:v3:${keyword}:${category}:${status}:${page}:${limit}`;
 
     // Check cache trước
     const cached = client?.isReady
@@ -432,6 +447,16 @@ router.get("/search-product", async (req, res) => {
       };
     }
     if (category) query.category = category;
+    if (status) {
+      if (status === "active") {
+        query.$or = [
+          { status: "active" },
+          { status: { $exists: false } }
+        ];
+      } else {
+        query.status = status;
+      }
+    }
 
     const [products, totalProducts] = await Promise.all([
       Product.find(query).skip(skip).limit(limit),
