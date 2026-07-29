@@ -74,7 +74,9 @@ router.get("/get-all-product", async (req, res) => {
 // GET list of active unique categories from products
 router.get("/get-categories", async (req, res) => {
   try {
-    const categories = await Product.distinct("category");
+    const categories = await Product.distinct("category", {
+      status: { $nin: ["inactive", "Ngừng bán", "hidden"] },
+    });
     res.status(200).json({
       code: 200,
       message: "Lấy danh sách danh mục thành công",
