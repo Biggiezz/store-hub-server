@@ -49,8 +49,6 @@ const Product = new mongoose.Schema(
     // Danh sách các biến thể màu sắc sản phẩm
     colors: [
       {
-        // Mã định danh màu sắc dạng chuỗi
-        id: { type: String },
         // Tên màu sắc hiển thị (ví dụ: Xanh lá, Đen)
         name: { type: String },
         // Mã màu HEX (ví dụ: #00FF00)
@@ -62,8 +60,6 @@ const Product = new mongoose.Schema(
     // Danh sách các phản hồi/nhận xét của khách hàng
     reviews: [
       {
-        // Mã nhận xét
-        id: { type: String },
         // Tên của khách hàng nhận xét
         customerName: { type: String },
         // Hình ảnh đại diện khách hàng nhận xét

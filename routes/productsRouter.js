@@ -153,7 +153,6 @@ router.post("/add-review", async (req, res) => {
     const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
 
     const newReview = {
-      id: Date.now().toString(),
       customerName,
       customerImage: customerImage || "",
       rating: parseFloat(rating),
@@ -202,7 +201,7 @@ router.post("/reply-review", async (req, res) => {
       return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm" });
     }
 
-    const review = product.reviews.find((r) => r.id === reviewId || r._id.toString() === reviewId);
+    const review = product.reviews.find((r) => String(r._id) === String(reviewId));
     if (!review) {
       return res.status(404).json({ code: 404, message: "Không tìm thấy đánh giá" });
     }
@@ -259,9 +258,7 @@ router.post("/add-to-cart", async (req, res) => {
     let colorName = "";
     let colorHex = "";
     if (colorId && product.colors && product.colors.length > 0) {
-      const matchedColor = product.colors.find(
-        (c) => c.id == colorId || c._id == colorId,
-      );
+      const matchedColor = product.colors.find((c) => String(c._id) === String(colorId));
       if (matchedColor) {
         colorName = matchedColor.name;
         colorHex = matchedColor.hex; // Lấy thêm mã màu Hex tương ứng
@@ -524,7 +521,7 @@ router.post("/checkout", async (req, res) => {
       product: item.productId,
       quantity: item.quantity,
       price: item.price,
-      color: { id: item.colorId, name: item.colorName }
+      color: { _id: item.colorId, name: item.colorName }
     }));
     const subtotal = cartItems.reduce(
       (total, item) => total + item.price * item.quantity,
