@@ -42,7 +42,7 @@ router.post("/register", async (req, res) => {
       email,
       phone,
       password: hashedPassword,
-      role: "customer",
+      role: "customer"
     });
 
     const savedUser = await newUser.save();
@@ -54,13 +54,14 @@ router.post("/register", async (req, res) => {
     res.status(201).json({
       code: 201,
       message: "Đăng ký tài khoản thành công",
-      data: userResponse,
+      data: userResponse
     });
+
   } catch (error) {
     res.status(500).json({
       code: 500,
       message: "Lỗi máy chủ khi đăng ký tài khoản.",
-      error: error.message,
+      error: error.message
     });
   }
 });
@@ -74,7 +75,7 @@ router.post("/login", async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({
         code: 400,
-        message: "Vui lòng cung cấp đầy đủ email và password.",
+        message: "Vui lòng cung cấp đầy đủ email và password."
       });
     }
 
@@ -83,7 +84,7 @@ router.post("/login", async (req, res) => {
     if (!user) {
       return res.status(400).json({
         code: 400,
-        message: "Email hoặc mật khẩu không chính xác.",
+        message: "Email hoặc mật khẩu không chính xác."
       });
     }
 
@@ -92,7 +93,7 @@ router.post("/login", async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({
         code: 400,
-        message: "Email hoặc mật khẩu không chính xác.",
+        message: "Email hoặc mật khẩu không chính xác."
       });
     }
 
@@ -105,7 +106,7 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
       { id: user._id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }, // Token có giá trị trong 7 ngày
+      { expiresIn: "7d" } // Token có giá trị trong 7 ngày
     );
 
     // Loại bỏ password trước khi trả về
@@ -128,52 +129,47 @@ router.post("/login", async (req, res) => {
     res.status(500).json({
       code: 500,
       message: "Lỗi máy chủ khi đăng nhập.",
-      error: error.message,
+      error: error.message
     });
   }
 });
 
 // Tạo tài khoản Admin (Chỉ có Super Admin mới có quyền tạo)
-router.post(
-  "/create-admin",
-  authenticateToken,
-  authorizeRoles("superadmin"),
-  async (req, res) => {
-    try {
-      const { name, email, phone, password } = req.body;
+router.post("/create-admin", authenticateToken, authorizeRoles("superadmin"), async (req, res) => {
+  try {
+    const { name, email, phone, password } = req.body;
 
-      // Kiểm tra thông tin đầu vào
-      if (!name || !email || !phone || !password) {
-        return res.status(400).json({
-          code: 400,
-          message:
-            "Vui lòng nhập đầy đủ các thông tin: name, email, phone, password.",
-        });
-      }
-
-      // Kiểm tra xem email đã được đăng ký chưa
-      const existingUser = await User.findOne({ email });
-      if (existingUser) {
-        return res.status(400).json({
-          code: 400,
-          message: "Email đã tồn tại trên hệ thống.",
-        });
-      }
-
-      // Mã hóa mật khẩu
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-
-      // Tạo user mới với quyền "admin"
-      const newAdmin = new User({
-        name,
-        email,
-        phone,
-        password: hashedPassword,
-        role: "admin",
+    // Kiểm tra thông tin đầu vào
+    if (!name || !email || !phone || !password) {
+      return res.status(400).json({
+        code: 400,
+        message: "Vui lòng nhập đầy đủ các thông tin: name, email, phone, password."
       });
+    }
 
-      const savedAdmin = await newAdmin.save();
+    // Kiểm tra xem email đã được đăng ký chưa
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        code: 400,
+        message: "Email đã tồn tại trên hệ thống."
+      });
+    }
+
+    // Mã hóa mật khẩu
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Tạo user mới với quyền "admin"
+    const newAdmin = new User({
+      name,
+      email,
+      phone,
+      password: hashedPassword,
+      role: "admin"
+    });
+
+    const savedAdmin = await newAdmin.save();
 
       // Loại bỏ password trước khi trả về
       const adminResponse = savedAdmin.toObject();
@@ -298,6 +294,7 @@ router.put("/update-profile", authenticateToken, (req, res) => {
     }
   });
 });
+
 
 // Đổi mật khẩu (oldPassword, newPassword) - cập nhật changePasswordDate
 router.put("/change-password", authenticateToken, async (req, res) => {
