@@ -1,12 +1,24 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const Cart = require("../models/Cart");
 const Order = require("../models/Order");
 const upload = require("../middlewares/upload");
+const { authenticateToken } = require("../middlewares/auth");
 
 const redis = require("redis");
 let client = null;
+
+// --- Code gốc của team (được comment lại để tham chiếu) ---
+// if (client) {
+//   client.on("error", (error) => console.error(`Redis error: ${error.message}`));
+//   client
+//     .connect()
+//     .catch((error) =>
+//       console.error(`Redis connection failed: ${error.message}`),
+//     );
+// }
 
 // --- Code xử lý Redis an toàn cho máy local (tự động chuyển sang MongoDB nếu chưa bật Redis) ---
 if (process.env.REDIS_URL) {
@@ -90,7 +102,7 @@ router.get("/get-categories", async (req, res) => {
 // GET 4 latest products
 router.get("/get-latest-product", async (req, res) => {
   try {
-    const latestProducts = await Product.find({})
+    const latestProducts = await Product.find({ isActive: { $ne: false } })
       .sort({ createdAt: -1 })
       .limit(4);
     res.status(200).json({
@@ -153,7 +165,6 @@ router.post("/add-review", async (req, res) => {
     const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
 
     const newReview = {
-      id: Date.now().toString(),
       customerName,
       customerImage: customerImage || "",
       rating: parseFloat(rating),
@@ -202,7 +213,7 @@ router.post("/reply-review", async (req, res) => {
       return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm" });
     }
 
-    const review = product.reviews.find((r) => r.id === reviewId || r._id.toString() === reviewId);
+    const review = product.reviews.find((r) => String(r._id) === String(reviewId));
     if (!review) {
       return res.status(404).json({ code: 404, message: "Không tìm thấy đánh giá" });
     }
@@ -226,9 +237,9 @@ router.post("/reply-review", async (req, res) => {
 });
 
 // GET all cart items
-router.get("/get-cart", async (req, res) => {
+router.get("/get-cart", authenticateToken, async (req, res) => {
   try {
-    const cartItems = await Cart.find({}).sort({ createdAt: -1 });
+    const cartItems = await Cart.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.status(200).json({
       code: 200,
       message: "Lấy danh sách giỏ hàng thành công",
@@ -240,7 +251,7 @@ router.get("/get-cart", async (req, res) => {
 });
 
 // POST add product to cart
-router.post("/add-to-cart", async (req, res) => {
+router.post("/add-to-cart", authenticateToken, async (req, res) => {
   try {
     const { productId, colorId, quantity } = req.body;
     if (!productId) {
@@ -259,18 +270,20 @@ router.post("/add-to-cart", async (req, res) => {
     let colorName = "";
     let colorHex = "";
     if (colorId && product.colors && product.colors.length > 0) {
-      const matchedColor = product.colors.find(
-        (c) => c.id == colorId || c._id == colorId,
-      );
+      const matchedColor = product.colors.find((c) => String(c._id) === String(colorId));
       if (matchedColor) {
         colorName = matchedColor.name;
         colorHex = matchedColor.hex; // Lấy thêm mã màu Hex tương ứng
       }
     }
 
-    const qty = parseInt(quantity) || 1;
+    const qty = Number(quantity);
+    if (!Number.isInteger(qty) || qty < 1) {
+      return res.status(400).json({ code: 400, message: "Số lượng không hợp lệ" });
+    }
 
     let existingCartItem = await Cart.findOne({
+      userId: req.user.id,
       productId: String(productId),
       colorId: colorId ? String(colorId) : null,
     });
@@ -280,6 +293,7 @@ router.post("/add-to-cart", async (req, res) => {
       await existingCartItem.save();
     } else {
       existingCartItem = new Cart({
+        userId: req.user.id,
         productId: String(productId),
         productName: product.name,
         productImage: product.image,
@@ -301,7 +315,7 @@ router.post("/add-to-cart", async (req, res) => {
       await existingCartItem.save();
     }
 
-    const allCartItems = await Cart.find({}).sort({ createdAt: -1 });
+    const allCartItems = await Cart.find({ userId: req.user.id }).sort({ createdAt: -1 });
 
     res.status(200).json({
       code: 200,
@@ -314,16 +328,26 @@ router.post("/add-to-cart", async (req, res) => {
 });
 
 // POST update cart item quantity
-router.post("/update-cart-quantity", async (req, res) => {
+router.post("/update-cart-quantity", authenticateToken, async (req, res) => {
   try {
     const { cartItemId, quantity } = req.body;
-    const qty = parseInt(quantity);
-    if (qty <= 0) {
-      await Cart.findByIdAndDelete(cartItemId);
-    } else {
-      await Cart.findByIdAndUpdate(cartItemId, { quantity: qty });
+    const qty = Number(quantity);
+    if (!mongoose.isValidObjectId(cartItemId) || !Number.isInteger(qty) || qty < 0) {
+      return res.status(400).json({ code: 400, message: "Số lượng không hợp lệ" });
     }
-    const cartItems = await Cart.find({}).sort({ createdAt: -1 });
+    let cartItem;
+    if (qty <= 0) {
+      cartItem = await Cart.findOneAndDelete({ _id: cartItemId, userId: req.user.id });
+    } else {
+      cartItem = await Cart.findOneAndUpdate(
+        { _id: cartItemId, userId: req.user.id },
+        { quantity: qty },
+      );
+    }
+    if (!cartItem) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm trong giỏ hàng" });
+    }
+    const cartItems = await Cart.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.status(200).json({
       code: 200,
       message: "Cập nhật số lượng thành công",
@@ -335,10 +359,16 @@ router.post("/update-cart-quantity", async (req, res) => {
 });
 
 // DELETE single item from cart
-router.delete("/delete-cart-item/:id", async (req, res) => {
+router.delete("/delete-cart-item/:id", authenticateToken, async (req, res) => {
   try {
-    await Cart.findByIdAndDelete(req.params.id);
-    const cartItems = await Cart.find({}).sort({ createdAt: -1 });
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ code: 400, message: "Sản phẩm trong giỏ hàng không hợp lệ" });
+    }
+    const cartItem = await Cart.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
+    if (!cartItem) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm trong giỏ hàng" });
+    }
+    const cartItems = await Cart.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.status(200).json({
       code: 200,
       message: "Xóa sản phẩm khỏi giỏ hàng thành công",
@@ -356,7 +386,7 @@ router.post("/add-product", (req, res) =>
       return res.status(400).json({ code: 400, message: uploadError.message, data: null });
     }
     try {
-      const { name, price, category, description, stock, colors, status } = req.body;
+      const { name, price, category, description, stock, colors, isActive, soldQuantity, rating } = req.body;
       if (!name || !price || !category || !req.file) {
         return res.status(400).json({
           code: 400,
@@ -373,9 +403,18 @@ router.post("/add-product", (req, res) =>
         category: category.trim(),
         description: description || "",
         stock: Number(stock) || 0,
+        soldQuantity: Number(soldQuantity) || 0,
+        rating: Number(rating) || 0,
         colors: parsedColors,
-        status: status || "active",
+        isActive: isActive !== undefined ? isActive === 'true' || isActive === true : true,
       });
+
+      // Clear search cache
+      if (client?.isReady) {
+        const keys = await client.keys("search:v3:*");
+        if (keys.length > 0) await client.del(keys);
+      }
+
       res.status(201).json({ code: 201, message: "Thêm sản phẩm thành công", data: savedProduct });
     } catch (error) {
       res.status(400).json({ code: 400, message: error.message, data: null });
@@ -393,7 +432,7 @@ router.put("/update-product/:id", (req, res) =>
       if (!product) {
         return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm", data: null });
       }
-      const { name, price, category, description, stock, colors, status } = req.body;
+      const { name, price, category, description, stock, colors, isActive, soldQuantity, rating } = req.body;
       if (!name || !price || !category) {
         return res.status(400).json({ code: 400, message: "Thiếu thông tin sản phẩm", data: null });
       }
@@ -402,12 +441,21 @@ router.put("/update-product/:id", (req, res) =>
       product.category = category.trim();
       product.description = description || "";
       product.stock = Number(stock) || 0;
-      if (status !== undefined) product.status = status;
+      if (isActive !== undefined) product.isActive = isActive === 'true' || isActive === true;
+      if (soldQuantity !== undefined) product.soldQuantity = Number(soldQuantity);
+      if (rating !== undefined) product.rating = Number(rating);
       if (colors) product.colors = JSON.parse(colors);
       if (req.file) {
         product.image = req.file.path;
       }
       const updatedProduct = await product.save();
+
+      // Clear search cache
+      if (client?.isReady) {
+        const keys = await client.keys("search:v3:*");
+        if (keys.length > 0) await client.del(keys);
+      }
+
       res.json({ code: 200, message: "Cập nhật sản phẩm thành công", data: updatedProduct });
     } catch (error) {
       res.status(400).json({ code: 400, message: error.message, data: null });
@@ -421,9 +469,9 @@ router.get("/search-product", async (req, res) => {
     const limit = parseInt(req.query.limit) || 6;
     const keyword = req.query.keyword || "";
     const category = String(req.query.category || "").trim();
-    const status = String(req.query.status || "").trim();
+    const showInactive = req.query.showInactive === 'true';
     const skip = (page - 1) * limit;
-    const cacheKey = `search:v4:${keyword}:${category}:${status}:${page}:${limit}`;
+    const cacheKey = `search:v3:${keyword}:${category}:${page}:${limit}:${showInactive}`;
 
     // Check cache trước
     const cached = client?.isReady
@@ -433,11 +481,10 @@ router.get("/search-product", async (req, res) => {
       return res.json(JSON.parse(cached));
     }
 
-    const query = status
-      ? status === "active"
-        ? { $or: [{ status: "active" }, { status: { $exists: false } }] }
-        : { status }
-      : { status: { $nin: ["inactive", "Ngừng bán", "hidden"] } };
+    const query = {};
+    if (!showInactive) {
+      query.isActive = { $ne: false };
+    }
     if (keyword) {
       query.name = {
             $regex: keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
@@ -447,7 +494,7 @@ router.get("/search-product", async (req, res) => {
     if (category) query.category = category;
 
     const [products, totalProducts] = await Promise.all([
-      Product.find(query).skip(skip).limit(limit),
+      Product.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
       Product.countDocuments(query),
     ]);
 
@@ -475,10 +522,10 @@ router.get("/search-product", async (req, res) => {
 });
 
 // POST calculate shipping fee quote
-router.post("/shipping-quote", async (req, res) => {
+router.post("/shipping-quote", authenticateToken, async (req, res) => {
   try {
     const { address, provider } = req.body;
-    const cartItems = await Cart.find({});
+    const cartItems = await Cart.find({ userId: req.user.id });
     let shippingFee = cartItems.length === 0 ? 0 : 40000;
 
     const deliveryDate = new Date();
@@ -508,10 +555,10 @@ router.post("/shipping-quote", async (req, res) => {
 });
 
 // POST /api/productsRouter/checkout - Thanh toán giỏ hàng và tạo Đơn hàng
-router.post("/checkout", async (req, res) => {
+router.post("/checkout", authenticateToken, async (req, res) => {
   try {
     const Order = require("../models/Order");
-    const cartItems = await Cart.find({});
+    const cartItems = await Cart.find({ userId: req.user.id });
 
     if (cartItems.length === 0) {
       return res.status(400).json({
@@ -524,7 +571,7 @@ router.post("/checkout", async (req, res) => {
       product: item.productId,
       quantity: item.quantity,
       price: item.price,
-      color: { id: item.colorId, name: item.colorName }
+      color: { _id: item.colorId, name: item.colorName }
     }));
     const subtotal = cartItems.reduce(
       (total, item) => total + item.price * item.quantity,
@@ -539,13 +586,23 @@ router.post("/checkout", async (req, res) => {
       subtotal,
       shippingFee,
       totalAmount,
-      status: "completed"
+      status: "completed",
+      user: req.user.id,
     });
 
     const savedOrder = await newOrder.save();
 
-    // ponytail: giỏ hàng hiện dùng chung; thêm userId + transaction khi tách giỏ theo tài khoản.
-    await Cart.deleteMany({});
+    // Cập nhật tồn kho và số lượng đã bán cho từng sản phẩm
+    for (const item of cartItems) {
+      await Product.findByIdAndUpdate(item.productId, {
+        $inc: {
+          stock: -item.quantity,
+          soldQuantity: item.quantity
+        }
+      });
+    }
+
+    await Cart.deleteMany({ userId: req.user.id });
 
     res.status(200).json({
       code: 200,

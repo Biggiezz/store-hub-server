@@ -69,13 +69,13 @@ function getStatusTimestamp(status) {
 }
 
 // POST create order from cart
-router.post("/create-order", async (req, res) => {
+router.post("/create-order", authenticateToken, async (req, res) => {
   try {
-    const userId = req.query.userId || req.body.userId;
+    const userId = req.user.id;
     const paymentMethod = (req.query.paymentMethod || req.body.paymentMethod) === "ZaloPay"
       ? "ZaloPay"
       : "COD";
-    const cartItems = await Cart.find({});
+    const cartItems = await Cart.find({ userId });
     if (cartItems.length === 0) {
       return res.status(400).json({ code: 400, message: "Giỏ hàng đang trống" });
     }
@@ -116,8 +116,18 @@ router.post("/create-order", async (req, res) => {
 
     const savedOrder = await newOrder.save();
 
+    // Cập nhật tồn kho và số lượng đã bán cho từng sản phẩm
+    for (const item of cartItems) {
+      await Product.findByIdAndUpdate(item.productId, {
+        $inc: {
+          stock: -item.quantity,
+          soldQuantity: item.quantity
+        }
+      });
+    }
+
     // Clear the cart after order created
-    await Cart.deleteMany({});
+    await Cart.deleteMany({ userId });
 
     res.status(200).json({
       code: 200,
@@ -130,26 +140,9 @@ router.post("/create-order", async (req, res) => {
 });
 
 // GET all orders
-router.get("/get-orders", async (req, res) => {
+router.get("/get-orders", authenticateToken, async (req, res) => {
   try {
-    // Delete any old invalid mockup orders or orders without user
-    await Order.deleteMany({
-      $or: [
-        { orderCode: { $exists: false } },
-        { orderCode: "" },
-        { orderCode: null },
-        { user: null },
-        { user: { $exists: false } }
-      ]
-    });
-
-    const userId = req.query.userId || req.body.userId;
-    let query = {};
-    if (userId) {
-      query.user = userId;
-    }
-
-    const orders = await Order.find(query).populate("user").sort({ createdAt: -1 });
+    const orders = await Order.find({ user: req.user.id }).populate("user").sort({ createdAt: -1 });
 
     // Fallback to user profile info if order receiver fields are empty
     const mappedOrders = orders.map(order => {
@@ -274,6 +267,64 @@ router.put(
   },
 );
 
+// Admin: Cập nhật số lượng sản phẩm trong đơn hàng và cập nhật Tồn kho
+router.put(
+  "/admin/orders/:orderId/update-item-quantity",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { orderId } = req.params;
+      const { productId, newQuantity } = req.body;
+
+      if (!productId || newQuantity === undefined) {
+        return res.status(400).json({ code: 400, message: "Thiếu thông tin sản phẩm hoặc số lượng mới" });
+      }
+
+      const order = await Order.findById(orderId);
+      if (!order) {
+        return res.status(404).json({ code: 404, message: "Không tìm thấy đơn hàng" });
+      }
+
+      const item = order.items.find(item => item.productId === productId || (item.product && item.product.toString() === productId));
+      if (!item) {
+        return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm trong đơn hàng" });
+      }
+
+      const oldQuantity = item.quantity;
+      const quantityDiff = newQuantity - oldQuantity;
+
+      // Cập nhật tồn kho của sản phẩm
+      // Nếu số lượng mới > số lượng cũ, trừ bớt tồn kho (giảm stock)
+      // Nếu số lượng mới < số lượng cũ, cộng lại vào tồn kho (tăng stock)
+      await Product.findByIdAndUpdate(productId, {
+        $inc: { stock: -quantityDiff }
+      });
+
+      item.quantity = newQuantity;
+
+      // Tính toán lại tổng tiền
+      let newSubtotal = 0;
+      order.items.forEach(i => {
+        newSubtotal += (i.price || 0) * (i.quantity || 0);
+      });
+      order.subtotal = newSubtotal;
+      order.totalPrice = newSubtotal;
+      order.totalAmount = newSubtotal + (order.shippingFee || 0);
+
+      await order.save();
+
+      res.status(200).json({
+        code: 200,
+        message: "Cập nhật số lượng sản phẩm và tồn kho thành công",
+        data: mapOrderForResponse(order)
+      });
+    } catch (error) {
+      res.status(500).json({ code: 500, message: error.message });
+    }
+  }
+);
+
 // POST cancel order
 router.post("/cancel-order", async (req, res) => {
   try {
@@ -337,9 +388,9 @@ router.post("/update-status", async (req, res) => {
 
 
 // POST clear all items in cart
-router.post("/clear-cart", async (req, res) => {
+router.post("/clear-cart", authenticateToken, async (req, res) => {
   try {
-    await Cart.deleteMany({});
+    await Cart.deleteMany({ userId: req.user.id });
     res.status(200).json({
       code: 200,
       message: "Đã xóa giỏ hàng thành công",
