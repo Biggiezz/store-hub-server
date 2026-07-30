@@ -1,9 +1,11 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const Product = require("../models/Product");
 const Cart = require("../models/Cart");
 const Order = require("../models/Order");
 const upload = require("../middlewares/upload");
+const { authenticateToken } = require("../middlewares/auth");
 
 const redis = require("redis");
 let client = null;
@@ -235,9 +237,9 @@ router.post("/reply-review", async (req, res) => {
 });
 
 // GET all cart items
-router.get("/get-cart", async (req, res) => {
+router.get("/get-cart", authenticateToken, async (req, res) => {
   try {
-    const cartItems = await Cart.find({}).sort({ createdAt: -1 });
+    const cartItems = await Cart.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.status(200).json({
       code: 200,
       message: "Lấy danh sách giỏ hàng thành công",
@@ -249,7 +251,7 @@ router.get("/get-cart", async (req, res) => {
 });
 
 // POST add product to cart
-router.post("/add-to-cart", async (req, res) => {
+router.post("/add-to-cart", authenticateToken, async (req, res) => {
   try {
     const { productId, colorId, quantity } = req.body;
     if (!productId) {
@@ -275,9 +277,13 @@ router.post("/add-to-cart", async (req, res) => {
       }
     }
 
-    const qty = parseInt(quantity) || 1;
+    const qty = Number(quantity);
+    if (!Number.isInteger(qty) || qty < 1) {
+      return res.status(400).json({ code: 400, message: "Số lượng không hợp lệ" });
+    }
 
     let existingCartItem = await Cart.findOne({
+      userId: req.user.id,
       productId: String(productId),
       colorId: colorId ? String(colorId) : null,
     });
@@ -287,6 +293,7 @@ router.post("/add-to-cart", async (req, res) => {
       await existingCartItem.save();
     } else {
       existingCartItem = new Cart({
+        userId: req.user.id,
         productId: String(productId),
         productName: product.name,
         productImage: product.image,
@@ -308,7 +315,7 @@ router.post("/add-to-cart", async (req, res) => {
       await existingCartItem.save();
     }
 
-    const allCartItems = await Cart.find({}).sort({ createdAt: -1 });
+    const allCartItems = await Cart.find({ userId: req.user.id }).sort({ createdAt: -1 });
 
     res.status(200).json({
       code: 200,
@@ -321,16 +328,26 @@ router.post("/add-to-cart", async (req, res) => {
 });
 
 // POST update cart item quantity
-router.post("/update-cart-quantity", async (req, res) => {
+router.post("/update-cart-quantity", authenticateToken, async (req, res) => {
   try {
     const { cartItemId, quantity } = req.body;
-    const qty = parseInt(quantity);
-    if (qty <= 0) {
-      await Cart.findByIdAndDelete(cartItemId);
-    } else {
-      await Cart.findByIdAndUpdate(cartItemId, { quantity: qty });
+    const qty = Number(quantity);
+    if (!mongoose.isValidObjectId(cartItemId) || !Number.isInteger(qty) || qty < 0) {
+      return res.status(400).json({ code: 400, message: "Số lượng không hợp lệ" });
     }
-    const cartItems = await Cart.find({}).sort({ createdAt: -1 });
+    let cartItem;
+    if (qty <= 0) {
+      cartItem = await Cart.findOneAndDelete({ _id: cartItemId, userId: req.user.id });
+    } else {
+      cartItem = await Cart.findOneAndUpdate(
+        { _id: cartItemId, userId: req.user.id },
+        { quantity: qty },
+      );
+    }
+    if (!cartItem) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm trong giỏ hàng" });
+    }
+    const cartItems = await Cart.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.status(200).json({
       code: 200,
       message: "Cập nhật số lượng thành công",
@@ -342,10 +359,16 @@ router.post("/update-cart-quantity", async (req, res) => {
 });
 
 // DELETE single item from cart
-router.delete("/delete-cart-item/:id", async (req, res) => {
+router.delete("/delete-cart-item/:id", authenticateToken, async (req, res) => {
   try {
-    await Cart.findByIdAndDelete(req.params.id);
-    const cartItems = await Cart.find({}).sort({ createdAt: -1 });
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ code: 400, message: "Sản phẩm trong giỏ hàng không hợp lệ" });
+    }
+    const cartItem = await Cart.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
+    if (!cartItem) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm trong giỏ hàng" });
+    }
+    const cartItems = await Cart.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.status(200).json({
       code: 200,
       message: "Xóa sản phẩm khỏi giỏ hàng thành công",
@@ -499,10 +522,10 @@ router.get("/search-product", async (req, res) => {
 });
 
 // POST calculate shipping fee quote
-router.post("/shipping-quote", async (req, res) => {
+router.post("/shipping-quote", authenticateToken, async (req, res) => {
   try {
     const { address, provider } = req.body;
-    const cartItems = await Cart.find({});
+    const cartItems = await Cart.find({ userId: req.user.id });
     let shippingFee = cartItems.length === 0 ? 0 : 40000;
 
     const deliveryDate = new Date();
@@ -532,10 +555,10 @@ router.post("/shipping-quote", async (req, res) => {
 });
 
 // POST /api/productsRouter/checkout - Thanh toán giỏ hàng và tạo Đơn hàng
-router.post("/checkout", async (req, res) => {
+router.post("/checkout", authenticateToken, async (req, res) => {
   try {
     const Order = require("../models/Order");
-    const cartItems = await Cart.find({});
+    const cartItems = await Cart.find({ userId: req.user.id });
 
     if (cartItems.length === 0) {
       return res.status(400).json({
@@ -563,7 +586,8 @@ router.post("/checkout", async (req, res) => {
       subtotal,
       shippingFee,
       totalAmount,
-      status: "completed"
+      status: "completed",
+      user: req.user.id,
     });
 
     const savedOrder = await newOrder.save();
@@ -578,8 +602,7 @@ router.post("/checkout", async (req, res) => {
       });
     }
 
-    // ponytail: giỏ hàng hiện dùng chung; thêm userId + transaction khi tách giỏ theo tài khoản.
-    await Cart.deleteMany({});
+    await Cart.deleteMany({ userId: req.user.id });
 
     res.status(200).json({
       code: 200,

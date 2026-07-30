@@ -69,13 +69,13 @@ function getStatusTimestamp(status) {
 }
 
 // POST create order from cart
-router.post("/create-order", async (req, res) => {
+router.post("/create-order", authenticateToken, async (req, res) => {
   try {
-    const userId = req.query.userId || req.body.userId;
+    const userId = req.user.id;
     const paymentMethod = (req.query.paymentMethod || req.body.paymentMethod) === "ZaloPay"
       ? "ZaloPay"
       : "COD";
-    const cartItems = await Cart.find({});
+    const cartItems = await Cart.find({ userId });
     if (cartItems.length === 0) {
       return res.status(400).json({ code: 400, message: "Giỏ hàng đang trống" });
     }
@@ -127,7 +127,7 @@ router.post("/create-order", async (req, res) => {
     }
 
     // Clear the cart after order created
-    await Cart.deleteMany({});
+    await Cart.deleteMany({ userId });
 
     res.status(200).json({
       code: 200,
@@ -140,26 +140,9 @@ router.post("/create-order", async (req, res) => {
 });
 
 // GET all orders
-router.get("/get-orders", async (req, res) => {
+router.get("/get-orders", authenticateToken, async (req, res) => {
   try {
-    // Delete any old invalid mockup orders or orders without user
-    await Order.deleteMany({
-      $or: [
-        { orderCode: { $exists: false } },
-        { orderCode: "" },
-        { orderCode: null },
-        { user: null },
-        { user: { $exists: false } }
-      ]
-    });
-
-    const userId = req.query.userId || req.body.userId;
-    let query = {};
-    if (userId) {
-      query.user = userId;
-    }
-
-    const orders = await Order.find(query).populate("user").sort({ createdAt: -1 });
+    const orders = await Order.find({ user: req.user.id }).populate("user").sort({ createdAt: -1 });
 
     // Fallback to user profile info if order receiver fields are empty
     const mappedOrders = orders.map(order => {
@@ -405,9 +388,9 @@ router.post("/update-status", async (req, res) => {
 
 
 // POST clear all items in cart
-router.post("/clear-cart", async (req, res) => {
+router.post("/clear-cart", authenticateToken, async (req, res) => {
   try {
-    await Cart.deleteMany({});
+    await Cart.deleteMany({ userId: req.user.id });
     res.status(200).json({
       code: 200,
       message: "Đã xóa giỏ hàng thành công",
