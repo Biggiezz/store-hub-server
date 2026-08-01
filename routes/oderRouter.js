@@ -180,7 +180,14 @@ router.get(
     try {
       const orders = await Order.find({})
         .populate("user", "name phone address email")
-        .populate("items.product", "name image price category")
+        .populate({
+          path: "items.product",
+          select: "name image price category",
+          populate: {
+            path: "category",
+            select: "name image isActive"
+          }
+        })
         .sort({ createdAt: -1 });
 
       res.status(200).json({
@@ -203,7 +210,14 @@ router.get(
     try {
       const order = await Order.findById(req.params.id)
         .populate("user", "name phone address email")
-        .populate("items.product", "name image price category");
+        .populate({
+          path: "items.product",
+          select: "name image price category",
+          populate: {
+            path: "category",
+            select: "name image isActive"
+          }
+        });
 
       if (!order) {
         return res.status(404).json({
@@ -246,7 +260,14 @@ router.put(
         { new: true, runValidators: true },
       )
         .populate("user", "name phone address email")
-        .populate("items.product", "name image price category");
+        .populate({
+          path: "items.product",
+          select: "name image price category",
+          populate: {
+            path: "category",
+            select: "name image isActive"
+          }
+        });
 
       if (!order) {
         return res.status(404).json({
