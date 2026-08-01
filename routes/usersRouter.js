@@ -698,9 +698,16 @@ async function buildRecentActivities(limit = 10) {
   const [orders, products, users, loginLogs] = await Promise.all([
     Order.find({})
       .populate("user", "name role phone")
-      .populate("items.product", "name image price category")
+      .populate({
+        path: "items.product",
+        select: "name image price category",
+        populate: {
+          path: "category",
+          select: "name"
+        }
+      })
       .sort({ createdAt: -1 }),
-    Product.find({}).sort({ createdAt: -1 }),
+    Product.find({}).populate("category").sort({ createdAt: -1 }),
     User.find({}).sort({ createdAt: -1 }),
     ActivityLog.find({
       type: { $in: ["login_admin", "login_customer"] },
@@ -762,7 +769,7 @@ async function buildRecentActivities(limit = 10) {
     activities.push({
       type: "product_created",
       title: `Sản phẩm mới: ${p.name}`,
-      detail: `Mã: ${String(p._id).slice(-6)} · Danh mục: ${p.category || "Chưa phân loại"} · Tồn kho: ${p.stock ?? 0}`,
+      detail: `Mã: ${String(p._id).slice(-6)} · Danh mục: ${p.category?.name || "Chưa phân loại"} · Tồn kho: ${p.stock ?? 0}`,
       createdAt: toISOSafe(p.createdAt),
       targetId: String(p._id),
     });
