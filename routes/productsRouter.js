@@ -10,6 +10,12 @@ const { authenticateToken } = require("../middlewares/auth");
 const redis = require("redis");
 let client = null;
 
+const productSort = (sort) => ({
+  price_asc: { price: 1, _id: 1 },
+  name_asc: { name: 1, _id: 1 },
+  name_desc: { name: -1, _id: 1 },
+}[sort] || { createdAt: -1, _id: -1 });
+
 // --- Code gốc của team (được comment lại để tham chiếu) ---
 // if (client) {
 //   client.on("error", (error) => console.error(`Redis error: ${error.message}`));
@@ -53,6 +59,7 @@ router.get("/get-all-product", async (req, res) => {
     // Lấy tổng số lượng sản phẩm để Client biết khi nào hết sản phẩm
     const category = String(req.query.category || "").trim();
     const status = String(req.query.status || "").trim();
+    const sort = String(req.query.sort || "").trim();
     const query = status
       ? status === "active"
         ? { $or: [{ status: "active" }, { status: { $exists: false } }] }
@@ -63,7 +70,8 @@ router.get("/get-all-product", async (req, res) => {
 
     // Lấy danh sách sản phẩm theo page và limit (sắp xếp mới nhất lên đầu để đảm bảo tính nhất quán khi phân trang)
     const products = await Product.find(query)
-      .sort({ createdAt: -1 })
+      .collation({ locale: "vi", strength: 1 })
+      .sort(productSort(sort))
       .skip(skip)
       .limit(limit);
 
@@ -470,8 +478,9 @@ router.get("/search-product", async (req, res) => {
     const keyword = req.query.keyword || "";
     const category = String(req.query.category || "").trim();
     const showInactive = req.query.showInactive === 'true';
+    const sort = String(req.query.sort || "").trim();
     const skip = (page - 1) * limit;
-    const cacheKey = `search:v3:${keyword}:${category}:${page}:${limit}:${showInactive}`;
+    const cacheKey = `search:v3:${keyword}:${category}:${page}:${limit}:${showInactive}:${sort}`;
 
     // Check cache trước
     const cached = client?.isReady
@@ -494,7 +503,7 @@ router.get("/search-product", async (req, res) => {
     if (category) query.category = category;
 
     const [products, totalProducts] = await Promise.all([
-      Product.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Product.find(query).collation({ locale: "vi", strength: 1 }).sort(productSort(sort)).skip(skip).limit(limit),
       Product.countDocuments(query),
     ]);
 
