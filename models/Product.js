@@ -19,7 +19,8 @@ const Product = new mongoose.Schema(
     },
     // Phân loại danh mục của sản phẩm
     category: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
       required: true,
     },
     // Mô tả chi tiết thông tin sản phẩm
