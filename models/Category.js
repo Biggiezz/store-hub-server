@@ -6,7 +6,7 @@ const CategorySchema = new mongoose.Schema(
     name: {
       type: String,
       required: [true, "Tên danh mục là bắt buộc"],
-      unique: true,
+      
       trim: true,
     },
     // Đường dẫn hình ảnh đại diện của danh mục (URL từ Cloudinary hoặc tương đương)
