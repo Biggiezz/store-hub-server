@@ -163,7 +163,8 @@ router.post(
       }
 
       // Lấy thông tin User đăng nhập hiện tại từ Database để lấy tên hiển thị
-      const user = await User.findById(req.user.id);
+      const userId = req.user._id || req.user.id;
+      const user = await User.findById(userId);
       if (!user) {
         return res.status(404).json({
           code: 404,

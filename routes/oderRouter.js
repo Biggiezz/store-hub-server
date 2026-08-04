@@ -254,9 +254,31 @@ router.put(
         });
       }
 
+      const orderCheck = await Order.findById(req.params.id).populate("user");
+      if (!orderCheck) {
+        return res.status(404).json({
+          code: 404,
+          message: "Không tìm thấy đơn hàng",
+          data: null,
+        });
+      }
+
+      const updateFields = { status, ...getStatusTimestamp(status) };
+      if (orderCheck.user) {
+        if ((!orderCheck.receiverName || orderCheck.receiverName.trim() === "") && orderCheck.user.name) {
+          updateFields.receiverName = orderCheck.user.name;
+        }
+        if ((!orderCheck.receiverPhone || orderCheck.receiverPhone.trim() === "") && orderCheck.user.phone) {
+          updateFields.receiverPhone = orderCheck.user.phone;
+        }
+        if ((!orderCheck.deliveryAddress || orderCheck.deliveryAddress.trim() === "") && orderCheck.user.address) {
+          updateFields.deliveryAddress = orderCheck.user.address;
+        }
+      }
+
       const order = await Order.findByIdAndUpdate(
         req.params.id,
-        { $set: { status, ...getStatusTimestamp(status) } },
+        { $set: updateFields },
         { new: true, runValidators: true },
       )
         .populate("user", "name phone address email")
@@ -268,14 +290,6 @@ router.put(
             select: "name image isActive"
           }
         });
-
-      if (!order) {
-        return res.status(404).json({
-          code: 404,
-          message: "Không tìm thấy đơn hàng",
-          data: null,
-        });
-      }
 
       res.status(200).json({
         code: 200,
@@ -346,36 +360,111 @@ router.put(
   }
 );
 
+// PUT update order shipping info
+router.put("/orders/:id/shipping", authenticateToken, async (req, res) => {
+  try {
+    const { receiverName, receiverPhone, deliveryAddress } = req.body;
+    if (!receiverName || !receiverPhone || !deliveryAddress) {
+      return res.status(400).json({ code: 400, message: "Thiếu thông tin người nhận" });
+    }
+
+    const order = await Order.findById(req.params.id);
+    if (!order) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy đơn hàng" });
+    }
+
+    // Check permissions: admin can update any order, customer can only update their own
+    const isAdmin = ADMIN_ROLES.includes(req.user.role);
+    if (!isAdmin && order.user.toString() !== req.user.id) {
+      return res.status(403).json({ code: 403, message: "Bạn không có quyền cập nhật đơn hàng này" });
+    }
+
+    // Update order shipping info
+    order.receiverName = receiverName;
+    order.receiverPhone = receiverPhone;
+    order.deliveryAddress = deliveryAddress;
+    await order.save();
+
+    // Also update user profile if it's the customer updating their own info
+    if (!isAdmin && order.user) {
+      await User.findByIdAndUpdate(req.user.id, {
+        name: receiverName,
+        phone: receiverPhone,
+        address: deliveryAddress
+      });
+    }
+
+    const updatedOrder = await Order.findById(req.params.id)
+      .populate("user", "name phone address email")
+      .populate({
+        path: "items.product",
+        select: "name image price category"
+      });
+
+    res.status(200).json({
+      code: 200,
+      message: "Cập nhật thông tin giao hàng thành công",
+      data: mapOrderForResponse(updatedOrder)
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
 // POST cancel order
-router.post("/cancel-order", async (req, res) => {
+router.post("/cancel-order", authenticateToken, async (req, res) => {
   try {
     const { orderId, reason } = req.body;
     if (!orderId) {
       return res.status(400).json({ code: 400, message: "Thiếu mã đơn hàng" });
     }
 
-    const result = await Order.updateOne(
-      { _id: orderId },
-      { $set: { status: "Đã hủy", cancelReason: reason || "" } }
-    );
-
-    if (result.matchedCount === 0) {
+    const order = await Order.findById(orderId);
+    if (!order) {
       return res.status(404).json({ code: 404, message: "Không tìm thấy đơn hàng" });
     }
 
-    const updatedOrder = await Order.findById(orderId);
+    const userRole = (req.user.role || "").trim().toLowerCase();
+    const isAdmin = ADMIN_ROLES.includes(userRole);
+    const isOwner = order.user && order.user.toString() === req.user._id.toString();
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({ code: 403, message: "Bạn không có quyền hủy đơn hàng này" });
+    }
+
+    if (order.status !== "Đã hủy") {
+      order.status = "Đã hủy";
+      order.cancelReason = reason || "";
+      await order.save();
+
+      // Hoàn trả lại số lượng tồn kho cho các sản phẩm trong đơn
+      if (order.items && order.items.length > 0) {
+        for (const item of order.items) {
+          const prodId = item.product || item.productId;
+          const qty = item.quantity || 1;
+          if (prodId) {
+            await Product.findByIdAndUpdate(prodId, {
+              $inc: {
+                stock: qty,
+                soldQuantity: -qty
+              }
+            });
+          }
+        }
+      }
+    }
 
     res.status(200).json({
       code: 200,
       message: "Đơn hàng đã được hủy",
-      data: updatedOrder,
+      data: order,
     });
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message });
   }
 });
 // POST update order status
-router.post("/update-status", async (req, res) => {
+router.post("/update-status", authenticateToken, authorizeRoles(...ADMIN_ROLES), async (req, res) => {
   try {
     const { orderId, status } = req.body;
     if (!orderId || !status) {

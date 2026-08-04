@@ -23,6 +23,29 @@ router.post("/register", async (req, res) => {
       });
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        code: 400,
+        message: "Email không hợp lệ.",
+      });
+    }
+
+    const phoneRegex = /^[0-9]{10,11}$/;
+    if (!phoneRegex.test(phone)) {
+      return res.status(400).json({
+        code: 400,
+        message: "Số điện thoại phải từ 10-11 chữ số.",
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        code: 400,
+        message: "Mật khẩu phải có ít nhất 6 ký tự.",
+      });
+    }
+
     // Kiểm tra xem email đã được đăng ký chưa
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -548,7 +571,7 @@ router.get("/admin/revenue-stats", async (req, res) => {
 });
 
 // Lấy danh sách toàn bộ người dùng
-router.get("/get-all-users", authenticateToken, async (req, res) => {
+router.get("/get-all-users", authenticateToken, authorizeRoles("admin", "superadmin"), async (req, res) => {
   try {
     const users = await User.find({}).sort({ createdAt: -1 });
     return res.status(200).json({
@@ -566,7 +589,7 @@ router.get("/get-all-users", authenticateToken, async (req, res) => {
 });
 
 // Thêm người dùng mới (dành cho Admin/Super Admin)
-router.post("/add-user", authenticateToken, async (req, res) => {
+router.post("/add-user", authenticateToken, authorizeRoles("admin", "superadmin"), async (req, res) => {
   try {
     const { name, email, phone, role, password, address, image } = req.body;
     if (!name || !email || !phone || !password) {
@@ -783,6 +806,7 @@ async function buildRecentActivities(limit = 10) {
       detail: `Vai trò: ${u.role || "customer"}`,
       createdAt: toISOSafe(u.createdAt),
       targetId: String(u._id),
+      customerName: u.name || "",
     });
   });
 
@@ -801,6 +825,7 @@ async function buildRecentActivities(limit = 10) {
       detail: `Vai trò: ${log.actorRole || "Customer"}`,
       createdAt: toISOSafe(log.eventAt || log.createdAt),
       targetId: log.targetId || "",
+      customerName: log.actorName || "",
     });
   });
 

@@ -6,7 +6,8 @@ const Category = require("../models/Category");
 const Cart = require("../models/Cart");
 const Order = require("../models/Order");
 const upload = require("../middlewares/upload");
-const { authenticateToken } = require("../middlewares/auth");
+const { authenticateToken, authorizeRoles } = require("../middlewares/auth");
+const ADMIN_ROLES = ["admin", "superadmin"];
 
 const redis = require("redis");
 let client = null;
@@ -16,6 +17,34 @@ const productSort = (sort) => ({
   name_asc: { name: 1, _id: 1 },
   name_desc: { name: -1, _id: 1 },
 }[sort] || { createdAt: -1, _id: -1 });
+
+const resolveCategoryQuery = async (category) => {
+  const categoryMap = {
+    "1": "Điện thoại",
+    "2": "Máy tính",
+    "3": "Tai nghe",
+    "4": "Đồng hồ",
+    "laptop": "Máy tính"
+  };
+
+  let targetCategory = categoryMap[category] || category;
+
+  if (mongoose.Types.ObjectId.isValid(targetCategory)) {
+    const cat = await Category.findById(targetCategory);
+    if (cat) {
+      return { $in: [ new mongoose.Types.ObjectId(targetCategory), cat.name ] };
+    } else {
+      return new mongoose.Types.ObjectId(targetCategory);
+    }
+  } else {
+    const cat = await Category.findOne({ name: { $regex: new RegExp("^" + targetCategory + "$", "i") } });
+    if (cat) {
+      return { $in: [ cat._id, targetCategory ] };
+    } else {
+      return targetCategory;
+    }
+  }
+};
 
 // --- Code gốc của team (được comment lại để tham chiếu) ---
 // if (client) {
@@ -68,13 +97,7 @@ router.get("/get-all-product", async (req, res) => {
       : { status: { $nin: ["inactive", "Ngừng bán", "hidden"] } };
 
     if (category) {
-      if (mongoose.Types.ObjectId.isValid(category)) {
-        query.category = category;
-      } else {
-        const cat = await Category.findOne({ name: category });
-        if (cat) query.category = cat._id;
-        else query.category = new mongoose.Types.ObjectId(); // Trả về trống
-      }
+      query.category = await resolveCategoryQuery(category);
     }
     const totalProducts = await Product.countDocuments(query);
 
@@ -398,7 +421,7 @@ router.delete("/delete-cart-item/:id", authenticateToken, async (req, res) => {
 });
 
 // POST create a new product
-router.post("/add-product", (req, res) =>
+router.post("/add-product", authenticateToken, authorizeRoles(...ADMIN_ROLES), (req, res) =>
   upload.single("image")(req, res, async (uploadError) => {
     if (uploadError) {
       return res.status(400).json({ code: 400, message: uploadError.message, data: null });
@@ -411,6 +434,14 @@ router.post("/add-product", (req, res) =>
           message: "Tên, giá, danh mục và hình ảnh là bắt buộc",
           data: null,
         });
+      }
+
+      if (isNaN(Number(price)) || Number(price) <= 0) {
+        return res.status(400).json({ code: 400, message: "Giá bán phải là số hợp lệ lớn hơn 0", data: null });
+      }
+
+      if (isNaN(Number(stock)) || Number(stock) < 0) {
+        return res.status(400).json({ code: 400, message: "Số lượng tồn kho phải là số hợp lệ không âm", data: null });
       }
 
       // Phân giải danh mục từ name sang ID nếu client gửi text danh mục
@@ -446,29 +477,33 @@ router.post("/add-product", (req, res) =>
         if (keys.length > 0) await client.del(keys);
       }
 
-      res.status(201).json({ code: 201, message: "Thêm sản phẩm thành công", data: savedProduct });
+      const populatedProduct = await Product.findById(savedProduct._id).populate("category");
+      res.status(201).json({ code: 201, message: "Thêm sản phẩm thành công", data: populatedProduct });
     } catch (error) {
       res.status(400).json({ code: 400, message: error.message, data: null });
     }
   }),
 );
 
-router.put("/update-product/:id", (req, res) =>
+router.put("/update-product/:id", authenticateToken, authorizeRoles(...ADMIN_ROLES), (req, res) =>
   upload.single("image")(req, res, async (uploadError) => {
     if (uploadError) {
       return res.status(400).json({ code: 400, message: uploadError.message, data: null });
     }
     try {
-      const product = await Product.findById(req.params.id);
-      if (!product) {
+      // Kiểm tra sản phẩm tồn tại bằng truy vấn thô (tránh Mongoose ép kiểu lỗi trên bản ghi cũ)
+      const rawProduct = await Product.collection.findOne({ _id: new mongoose.Types.ObjectId(req.params.id) });
+      if (!rawProduct) {
         return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm", data: null });
       }
+
+      console.log("update-product body:", req.body);
       const { name, price, category, description, stock, colors, isActive, soldQuantity, rating } = req.body;
       if (!name || !price || !category) {
         return res.status(400).json({ code: 400, message: "Thiếu thông tin sản phẩm", data: null });
       }
 
-      // Phân giải danh mục từ name sang ID nếu client gửi text danh mục
+      // Phân giải danh mục từ name sang ID nếu client gửi tên danh mục
       let categoryId = category.trim();
       if (!mongoose.Types.ObjectId.isValid(categoryId)) {
         const cat = await Category.findOne({ name: categoryId });
@@ -480,27 +515,43 @@ router.put("/update-product/:id", (req, res) =>
         }
       }
 
-      product.name = name.trim();
-      product.price = Number(price);
-      product.category = categoryId;
-      product.description = description || "";
-      product.stock = Number(stock) || 0;
-      if (isActive !== undefined) product.isActive = isActive === 'true' || isActive === true;
-      if (soldQuantity !== undefined) product.soldQuantity = Number(soldQuantity);
-      if (rating !== undefined) product.rating = Number(rating);
-      if (colors) product.colors = JSON.parse(colors);
-      if (req.file) {
-        product.image = req.file.path;
-      }
-      const updatedProduct = await product.save();
+      const updateData = {
+        name: name.trim(),
+        price: Number(price),
+        category: categoryId,
+        description: description || "",
+        stock: Number(stock) || 0,
+      };
 
-      // Clear search cache
+      if (isActive !== undefined) {
+        updateData.isActive = isActive === 'true' || isActive === true;
+      }
+      if (soldQuantity !== undefined) {
+        updateData.soldQuantity = Number(soldQuantity);
+      }
+      if (rating !== undefined) {
+        updateData.rating = Number(rating);
+      }
+      if (colors) {
+        updateData.colors = JSON.parse(colors);
+      }
+      if (req.file) {
+        updateData.image = req.file.path;
+      }
+
+      const populatedProduct = await Product.findByIdAndUpdate(
+        req.params.id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      ).populate("category");
+
+      // Xóa cache tìm kiếm
       if (client?.isReady) {
         const keys = await client.keys("search:v3:*");
         if (keys.length > 0) await client.del(keys);
       }
 
-      res.json({ code: 200, message: "Cập nhật sản phẩm thành công", data: updatedProduct });
+      res.json({ code: 200, message: "Cập nhật sản phẩm thành công", data: populatedProduct });
     } catch (error) {
       res.status(400).json({ code: 400, message: error.message, data: null });
     }
@@ -538,13 +589,7 @@ router.get("/search-product", async (req, res) => {
     }
 
     if (category) {
-      if (mongoose.Types.ObjectId.isValid(category)) {
-        query.category = category;
-      } else {
-        const cat = await Category.findOne({ name: category });
-        if (cat) query.category = cat._id;
-        else query.category = new mongoose.Types.ObjectId();
-      }
+      query.category = await resolveCategoryQuery(category);
     }
 
     const [products, totalProducts] = await Promise.all([
