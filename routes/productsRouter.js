@@ -446,7 +446,8 @@ router.post("/add-product", (req, res) =>
         if (keys.length > 0) await client.del(keys);
       }
 
-      res.status(201).json({ code: 201, message: "Thêm sản phẩm thành công", data: savedProduct });
+      const populatedProduct = await Product.findById(savedProduct._id).populate("category");
+      res.status(201).json({ code: 201, message: "Thêm sản phẩm thành công", data: populatedProduct });
     } catch (error) {
       res.status(400).json({ code: 400, message: error.message, data: null });
     }
@@ -493,6 +494,7 @@ router.put("/update-product/:id", (req, res) =>
         product.image = req.file.path;
       }
       const updatedProduct = await product.save();
+      const populatedProduct = await Product.findById(updatedProduct._id).populate("category");
 
       // Clear search cache
       if (client?.isReady) {
@@ -500,7 +502,7 @@ router.put("/update-product/:id", (req, res) =>
         if (keys.length > 0) await client.del(keys);
       }
 
-      res.json({ code: 200, message: "Cập nhật sản phẩm thành công", data: updatedProduct });
+      res.json({ code: 200, message: "Cập nhật sản phẩm thành công", data: populatedProduct });
     } catch (error) {
       res.status(400).json({ code: 400, message: error.message, data: null });
     }
