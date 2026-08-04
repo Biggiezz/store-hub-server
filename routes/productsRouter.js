@@ -464,6 +464,7 @@ router.put("/update-product/:id", (req, res) =>
       if (!product) {
         return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm", data: null });
       }
+      console.log("update-product body:", req.body);
       const { name, price, category, description, stock, colors, isActive, soldQuantity, rating } = req.body;
       if (!name || !price || !category) {
         return res.status(400).json({ code: 400, message: "Thiếu thông tin sản phẩm", data: null });
