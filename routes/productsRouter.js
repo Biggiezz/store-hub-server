@@ -460,17 +460,19 @@ router.put("/update-product/:id", (req, res) =>
       return res.status(400).json({ code: 400, message: uploadError.message, data: null });
     }
     try {
-      const product = await Product.findById(req.params.id);
-      if (!product) {
+      // Kiểm tra sản phẩm tồn tại bằng truy vấn thô (tránh Mongoose ép kiểu lỗi trên bản ghi cũ)
+      const rawProduct = await Product.collection.findOne({ _id: new mongoose.Types.ObjectId(req.params.id) });
+      if (!rawProduct) {
         return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm", data: null });
       }
+
       console.log("update-product body:", req.body);
       const { name, price, category, description, stock, colors, isActive, soldQuantity, rating } = req.body;
       if (!name || !price || !category) {
         return res.status(400).json({ code: 400, message: "Thiếu thông tin sản phẩm", data: null });
       }
 
-      // Phân giải danh mục từ name sang ID nếu client gửi text danh mục
+      // Phân giải danh mục từ name sang ID nếu client gửi tên danh mục
       let categoryId = category.trim();
       if (!mongoose.Types.ObjectId.isValid(categoryId)) {
         const cat = await Category.findOne({ name: categoryId });
@@ -482,22 +484,37 @@ router.put("/update-product/:id", (req, res) =>
         }
       }
 
-      product.name = name.trim();
-      product.price = Number(price);
-      product.category = categoryId;
-      product.description = description || "";
-      product.stock = Number(stock) || 0;
-      if (isActive !== undefined) product.isActive = isActive === 'true' || isActive === true;
-      if (soldQuantity !== undefined) product.soldQuantity = Number(soldQuantity);
-      if (rating !== undefined) product.rating = Number(rating);
-      if (colors) product.colors = JSON.parse(colors);
-      if (req.file) {
-        product.image = req.file.path;
-      }
-      const updatedProduct = await product.save();
-      const populatedProduct = await Product.findById(updatedProduct._id).populate("category");
+      const updateData = {
+        name: name.trim(),
+        price: Number(price),
+        category: categoryId,
+        description: description || "",
+        stock: Number(stock) || 0,
+      };
 
-      // Clear search cache
+      if (isActive !== undefined) {
+        updateData.isActive = isActive === 'true' || isActive === true;
+      }
+      if (soldQuantity !== undefined) {
+        updateData.soldQuantity = Number(soldQuantity);
+      }
+      if (rating !== undefined) {
+        updateData.rating = Number(rating);
+      }
+      if (colors) {
+        updateData.colors = JSON.parse(colors);
+      }
+      if (req.file) {
+        updateData.image = req.file.path;
+      }
+
+      const populatedProduct = await Product.findByIdAndUpdate(
+        req.params.id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      ).populate("category");
+
+      // Xóa cache tìm kiếm
       if (client?.isReady) {
         const keys = await client.keys("search:v3:*");
         if (keys.length > 0) await client.del(keys);
