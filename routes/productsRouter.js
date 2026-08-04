@@ -6,7 +6,8 @@ const Category = require("../models/Category");
 const Cart = require("../models/Cart");
 const Order = require("../models/Order");
 const upload = require("../middlewares/upload");
-const { authenticateToken } = require("../middlewares/auth");
+const { authenticateToken, authorizeRoles } = require("../middlewares/auth");
+const ADMIN_ROLES = ["admin", "superadmin"];
 
 const redis = require("redis");
 let client = null;
@@ -420,7 +421,7 @@ router.delete("/delete-cart-item/:id", authenticateToken, async (req, res) => {
 });
 
 // POST create a new product
-router.post("/add-product", (req, res) =>
+router.post("/add-product", authenticateToken, authorizeRoles(...ADMIN_ROLES), (req, res) =>
   upload.single("image")(req, res, async (uploadError) => {
     if (uploadError) {
       return res.status(400).json({ code: 400, message: uploadError.message, data: null });
@@ -433,6 +434,14 @@ router.post("/add-product", (req, res) =>
           message: "Tên, giá, danh mục và hình ảnh là bắt buộc",
           data: null,
         });
+      }
+
+      if (isNaN(Number(price)) || Number(price) <= 0) {
+        return res.status(400).json({ code: 400, message: "Giá bán phải là số hợp lệ lớn hơn 0", data: null });
+      }
+
+      if (isNaN(Number(stock)) || Number(stock) < 0) {
+        return res.status(400).json({ code: 400, message: "Số lượng tồn kho phải là số hợp lệ không âm", data: null });
       }
 
       // Phân giải danh mục từ name sang ID nếu client gửi text danh mục
@@ -476,7 +485,7 @@ router.post("/add-product", (req, res) =>
   }),
 );
 
-router.put("/update-product/:id", (req, res) =>
+router.put("/update-product/:id", authenticateToken, authorizeRoles(...ADMIN_ROLES), (req, res) =>
   upload.single("image")(req, res, async (uploadError) => {
     if (uploadError) {
       return res.status(400).json({ code: 400, message: uploadError.message, data: null });
