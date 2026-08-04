@@ -17,6 +17,34 @@ const productSort = (sort) => ({
   name_desc: { name: -1, _id: 1 },
 }[sort] || { createdAt: -1, _id: -1 });
 
+const resolveCategoryQuery = async (category) => {
+  const categoryMap = {
+    "1": "Điện thoại",
+    "2": "Máy tính",
+    "3": "Tai nghe",
+    "4": "Đồng hồ",
+    "laptop": "Máy tính"
+  };
+
+  let targetCategory = categoryMap[category] || category;
+
+  if (mongoose.Types.ObjectId.isValid(targetCategory)) {
+    const cat = await Category.findById(targetCategory);
+    if (cat) {
+      return { $in: [ new mongoose.Types.ObjectId(targetCategory), cat.name ] };
+    } else {
+      return new mongoose.Types.ObjectId(targetCategory);
+    }
+  } else {
+    const cat = await Category.findOne({ name: { $regex: new RegExp("^" + targetCategory + "$", "i") } });
+    if (cat) {
+      return { $in: [ cat._id, targetCategory ] };
+    } else {
+      return targetCategory;
+    }
+  }
+};
+
 // --- Code gốc của team (được comment lại để tham chiếu) ---
 // if (client) {
 //   client.on("error", (error) => console.error(`Redis error: ${error.message}`));
@@ -68,13 +96,7 @@ router.get("/get-all-product", async (req, res) => {
       : { status: { $nin: ["inactive", "Ngừng bán", "hidden"] } };
 
     if (category) {
-      if (mongoose.Types.ObjectId.isValid(category)) {
-        query.category = category;
-      } else {
-        const cat = await Category.findOne({ name: category });
-        if (cat) query.category = cat._id;
-        else query.category = new mongoose.Types.ObjectId(); // Trả về trống
-      }
+      query.category = await resolveCategoryQuery(category);
     }
     const totalProducts = await Product.countDocuments(query);
 
@@ -558,13 +580,7 @@ router.get("/search-product", async (req, res) => {
     }
 
     if (category) {
-      if (mongoose.Types.ObjectId.isValid(category)) {
-        query.category = category;
-      } else {
-        const cat = await Category.findOne({ name: category });
-        if (cat) query.category = cat._id;
-        else query.category = new mongoose.Types.ObjectId();
-      }
+      query.category = await resolveCategoryQuery(category);
     }
 
     const [products, totalProducts] = await Promise.all([
