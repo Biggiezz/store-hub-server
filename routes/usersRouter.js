@@ -238,7 +238,7 @@ router.put("/update-avatar", authenticateToken, (req, res) => {
       const updatedUser = await User.findByIdAndUpdate(
         req.user.id,
         { image: imageUrl },
-        { new: true },
+        { returnDocument: 'after' },
       );
 
       if (!updatedUser) {
@@ -290,7 +290,7 @@ router.put("/update-profile", authenticateToken, (req, res) => {
       }
 
       const updatedUser = await User.findByIdAndUpdate(req.user.id, updates, {
-        new: true,
+        returnDocument: 'after',
       });
 
       if (!updatedUser) {

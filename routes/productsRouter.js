@@ -542,7 +542,7 @@ router.put("/update-product/:id", authenticateToken, authorizeRoles(...ADMIN_ROL
       const populatedProduct = await Product.findByIdAndUpdate(
         req.params.id,
         { $set: updateData },
-        { new: true, runValidators: true }
+        { returnDocument: 'after', runValidators: true }
       ).populate("category");
 
       // Xóa cache tìm kiếm

@@ -279,7 +279,7 @@ router.put(
       const order = await Order.findByIdAndUpdate(
         req.params.id,
         { $set: updateFields },
-        { new: true, runValidators: true },
+        { returnDocument: 'after', runValidators: true },
       )
         .populate("user", "name phone address email")
         .populate({
