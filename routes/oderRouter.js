@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const crypto = require("crypto");
+const https = require("https");
 const Order = require("../models/Order");
 const Cart = require("../models/Cart");
 const Product = require("../models/Product");
@@ -68,6 +70,49 @@ function getStatusTimestamp(status) {
   return {};
 }
 
+// Hàm truy vấn trạng thái đơn hàng của ZaloPay
+function queryZaloPayOrder(appTransId) {
+  return new Promise((resolve, reject) => {
+    const appId = 2553;
+    const key1 = "PcY4iZIKFCIdgZvA6ueMcMHHUbRLYjPL";
+    const dataToMac = `${appId}|${appTransId}|${key1}`;
+    const mac = crypto.createHmac("sha256", key1).update(dataToMac).digest("hex");
+
+    const postData = new URLSearchParams({
+      app_id: appId,
+      app_trans_id: appTransId,
+      mac: mac
+    }).toString();
+
+    const options = {
+      hostname: "sb-openapi.zalopay.vn",
+      port: 443,
+      path: "/v2/query",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": Buffer.byteLength(postData)
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let body = "";
+      res.on("data", (chunk) => body += chunk);
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+
+    req.on("error", (e) => reject(e));
+    req.write(postData);
+    req.end();
+  });
+}
+
 // POST create order from cart
 router.post("/create-order", authenticateToken, async (req, res) => {
   try {
@@ -75,6 +120,7 @@ router.post("/create-order", authenticateToken, async (req, res) => {
     const paymentMethod = (req.query.paymentMethod || req.body.paymentMethod) === "ZaloPay"
       ? "ZaloPay"
       : "COD";
+    const appTransId = req.query.appTransId || req.body.appTransId;
     const cartItems = await Cart.find({ userId });
     if (cartItems.length === 0) {
       return res.status(400).json({ code: 400, message: "Giỏ hàng đang trống" });
@@ -96,15 +142,28 @@ router.post("/create-order", authenticateToken, async (req, res) => {
     });
 
     const orderCode = `#SH-${Date.now().toString().slice(-6)}`;
-
     const userDoc = userId ? await User.findById(userId) : null;
+
+    let discountAmount = 0;
+    if (paymentMethod === "ZaloPay" && appTransId) {
+      try {
+        const queryResult = await queryZaloPayOrder(appTransId);
+        console.log("ZaloPay query result:", queryResult);
+        if (queryResult && queryResult.return_code === 1) {
+          discountAmount = Number(queryResult.discount_amount || 0);
+        }
+      } catch (err) {
+        console.error("Lỗi khi truy vấn đơn hàng ZaloPay:", err);
+      }
+    }
 
     const newOrder = new Order({
       orderCode,
       items: orderItems,
       subtotal: totalPrice,
       totalPrice,
-      totalAmount: totalPrice + 40000,
+      discount: discountAmount,
+      totalAmount: totalPrice + 40000 - discountAmount,
       status: "Chờ xác nhận",
       shippingFee: 40000,
       paymentMethod,

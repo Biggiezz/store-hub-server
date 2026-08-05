@@ -76,6 +76,8 @@ const Product = new mongoose.Schema(
         rating: { type: Number, default: 0 },
         // Nội dung nhận xét
         content: { type: String },
+        // Danh sách hình ảnh/video đánh giá
+        media: [{ type: String }],
         // Nội dung phản hồi nhận xét từ phía Admin (nếu có)
         replyContent: { type: String, default: "" },
         // Thời điểm Admin gửi phản hồi

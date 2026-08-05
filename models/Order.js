@@ -72,6 +72,11 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 40000,
     },
+    // Số tiền giảm giá của ZaloPay voucher
+    discount: {
+      type: Number,
+      default: 0,
+    },
     // Phương thức khách hàng chọn khi thanh toán.
     paymentMethod: {
       type: String,

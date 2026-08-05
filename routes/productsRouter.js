@@ -6,6 +6,9 @@ const Category = require("../models/Category");
 const Cart = require("../models/Cart");
 const Order = require("../models/Order");
 const upload = require("../middlewares/upload");
+const multer = require("multer");
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const cloudinary = require("../config/cloudinary");
 const { authenticateToken, authorizeRoles } = require("../middlewares/auth");
 const ADMIN_ROLES = ["admin", "superadmin"];
 
@@ -175,70 +178,104 @@ router.get("/get-product-by-id/:id", async (req, res) => {
   }
 });
 
+const storageReview = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: {
+    folder: "store-hub/reviews",
+    resource_type: "auto",
+    transformation: [
+      {
+        width: 720,
+        crop: "limit",
+        quality: "auto",
+        fetch_format: "auto",
+      }
+    ]
+  },
+});
+
+const uploadReview = multer({
+  storage: storageReview,
+  limits: { fileSize: 30 * 1024 * 1024 }, // Giới hạn 30MB
+});
+
 // POST add a product review
-router.post("/add-review", async (req, res) => {
-  try {
-    const { productId, customerName, customerImage, rating, content, orderId } = req.body;
-    if (!productId || !customerName || rating === undefined || !content) {
-      return res
-        .status(400)
-        .json({ code: 400, message: "Thiếu thông tin đánh giá" });
+router.post("/add-review", (req, res) => {
+  uploadReview.array("media", 5)(req, res, async (uploadError) => {
+    if (uploadError) {
+      return res.status(400).json({ code: 400, message: "Lỗi tải tệp: " + uploadError.message });
     }
 
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res
-        .status(404)
-        .json({ code: 404, message: "Không tìm thấy sản phẩm" });
-    }
-
-    // Check if order was already reviewed
-    if (orderId) {
-      const order = await Order.findById(orderId);
-      if (order && order.isReviewed) {
+    try {
+      const { productId, customerName, customerImage, rating, content, orderId } = req.body;
+      if (!productId || !customerName || rating === undefined || !content) {
         return res
           .status(400)
-          .json({ code: 400, message: "Đơn hàng này đã được đánh giá trước đó" });
+          .json({ code: 400, message: "Thiếu thông tin đánh giá" });
       }
+
+      const product = await Product.findById(productId);
+      if (!product) {
+        return res
+          .status(404)
+          .json({ code: 404, message: "Không tìm thấy sản phẩm" });
+      }
+
+      // Check if order was already reviewed
+      if (orderId) {
+        const order = await Order.findById(orderId);
+        if (order && order.isReviewed) {
+          return res
+            .status(400)
+            .json({ code: 400, message: "Đơn hàng này đã được đánh giá trước đó" });
+        }
+      }
+
+      const now = new Date();
+      const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
+
+      // Lấy danh sách URL của hình ảnh/video tải lên từ Cloudinary
+      const mediaUrls = req.files ? req.files.map(file => file.path) : [];
+
+      const newReview = {
+        customerName,
+        customerImage: customerImage || "",
+        rating: parseFloat(rating),
+        content,
+        media: mediaUrls,
+        createdAt: formattedDate,
+      };
+
+      if (!product.reviews) {
+        product.reviews = [];
+      }
+      product.reviews.unshift(newReview);
+
+      const totalRating = product.reviews.reduce(
+        (acc, cur) => acc + (cur.rating || 0),
+        0,
+      );
+      product.reviewCount = product.reviews.length;
+      product.rating = parseFloat((totalRating / product.reviewCount).toFixed(1));
+
+      await product.save();
+
+      if (orderId) {
+        await Order.findByIdAndUpdate(orderId, { isReviewed: true });
+      }
+
+      // Populate category trước khi trả về để tránh lỗi JsonSyntaxException ở Client Android
+      const populatedProduct = await Product.findById(product._id).populate("category");
+
+      res.status(200).json({
+        code: 200,
+        message: "Đã thêm đánh giá thành công",
+        data: populatedProduct,
+      });
+    } catch (error) {
+      res.status(500).json({ code: 500, message: error.message });
     }
-
-    const now = new Date();
-    const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
-
-    const newReview = {
-      customerName,
-      customerImage: customerImage || "",
-      rating: parseFloat(rating),
-      content,
-      createdAt: formattedDate,
-    };
-
-    if (!product.reviews) {
-      product.reviews = [];
-    }
-    product.reviews.unshift(newReview);
-
-    const totalRating = product.reviews.reduce(
-      (acc, cur) => acc + (cur.rating || 0),
-      0,
-    );
-    product.reviewCount = product.reviews.length;
-    product.rating = parseFloat((totalRating / product.reviewCount).toFixed(1));
-
-    await product.save();
-
-    if (orderId) {
-      await Order.findByIdAndUpdate(orderId, { isReviewed: true });
-    }
-
-    res.status(200).json({
-      code: 200,
-      message: "Đã thêm đánh giá thành công",
-      data: product,
-    });
-  } catch (error) {
-    res.status(500).json({ code: 500, message: error.message });
-  }
+  });
 });
 
 // POST reply to a review
@@ -266,11 +303,11 @@ router.post("/reply-review", async (req, res) => {
     review.replyCreatedAt = formattedDate;
 
     await product.save();
-
+    const populatedProduct = await Product.findById(product._id).populate("category");
     res.status(200).json({
       code: 200,
       message: "Đã phản hồi đánh giá thành công",
-      data: product,
+      data: populatedProduct,
     });
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message });
