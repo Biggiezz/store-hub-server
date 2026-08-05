@@ -19,7 +19,8 @@ const Product = new mongoose.Schema(
     },
     // Phân loại danh mục của sản phẩm
     category: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
       required: true,
     },
     // Mô tả chi tiết thông tin sản phẩm
@@ -41,11 +42,19 @@ const Product = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Số lượng sản phẩm đã bán
+    soldQuantity: {
+      type: Number,
+      default: 0,
+    },
+    // Trạng thái kinh doanh (true: đang kinh doanh, false: ngừng kinh doanh)
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
     // Danh sách các biến thể màu sắc sản phẩm
     colors: [
       {
-        // Mã định danh màu sắc dạng chuỗi
-        id: { type: String },
         // Tên màu sắc hiển thị (ví dụ: Xanh lá, Đen)
         name: { type: String },
         // Mã màu HEX (ví dụ: #00FF00)
@@ -57,8 +66,6 @@ const Product = new mongoose.Schema(
     // Danh sách các phản hồi/nhận xét của khách hàng
     reviews: [
       {
-        // Mã nhận xét
-        id: { type: String },
         // Tên của khách hàng nhận xét
         customerName: { type: String },
         // Hình ảnh đại diện khách hàng nhận xét

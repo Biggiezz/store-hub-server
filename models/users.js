@@ -43,6 +43,15 @@ const UserSchema = new mongoose.Schema(
             type: Date,
             default: Date.now,
         },
+        // Thời điểm hoạt động cuối cùng của người dùng
+        lastActive: {
+            type: Date,
+        },
+        // Trạng thái trực tuyến của người dùng
+        isOnline: {
+            type: Boolean,
+            default: false,
+        },
     },
     {
         // Tự động lưu thời gian tạo (createdAt) và cập nhật (updatedAt)
