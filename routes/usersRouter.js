@@ -789,12 +789,18 @@ async function buildRecentActivities(limit = 10) {
 
   // 2. Duyệt danh sách sản phẩm mới
   products.forEach((p) => {
+    const stockVal = p.stock ?? 0;
     activities.push({
       type: "product_created",
       title: `Sản phẩm mới: ${p.name}`,
-      detail: `Mã: ${String(p._id).slice(-6)} · Danh mục: ${p.category?.name || "Chưa phân loại"} · Tồn kho: ${p.stock ?? 0}`,
+      detail: `Mã: ${String(p._id).slice(-6)} · Danh mục: ${p.category?.name || "Chưa phân loại"} · Tồn kho: ${stockVal}`,
       createdAt: toISOSafe(p.createdAt),
       targetId: String(p._id),
+      customerName: p.name || "",
+      productImage: p.image || "",
+      productStock: stockVal,
+      productPrice: p.price ?? 0,
+      productStatus: stockVal > 0 ? "Đang bán" : "Hết hàng",
     });
   });
 
