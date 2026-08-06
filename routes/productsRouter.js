@@ -30,18 +30,13 @@ const resolveCategoryQuery = async (category) => {
   let targetCategory = categoryMap[category] || category;
 
   if (mongoose.Types.ObjectId.isValid(targetCategory)) {
-    const cat = await Category.findById(targetCategory);
-    if (cat) {
-      return { $in: [ new mongoose.Types.ObjectId(targetCategory), cat.name ] };
-    } else {
-      return new mongoose.Types.ObjectId(targetCategory);
-    }
+    return new mongoose.Types.ObjectId(targetCategory);
   } else {
     const cat = await Category.findOne({ name: { $regex: new RegExp("^" + targetCategory + "$", "i") } });
     if (cat) {
-      return { $in: [ cat._id, targetCategory ] };
+      return cat._id;
     } else {
-      return targetCategory;
+      return new mongoose.Types.ObjectId();
     }
   }
 };
