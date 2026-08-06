@@ -292,7 +292,7 @@ router.put(
       const updatedNews = await News.findByIdAndUpdate(
         id,
         { $set: updateData },
-        { new: true, runValidators: true }, // Trả về tài liệu sau khi cập nhật và kiểm tra validate
+        { returnDocument: 'after', runValidators: true }, // Trả về tài liệu sau khi cập nhật và kiểm tra validate
       );
 
       if (!updatedNews) {
