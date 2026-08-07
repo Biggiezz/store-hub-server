@@ -113,6 +113,73 @@ function queryZaloPayOrder(appTransId) {
   });
 }
 
+// Hàm hoàn tiền qua cổng ZaloPay (Thực hiện trên backend để đảm bảo bảo mật cho Key2)
+// Tham số:
+// - zpTransId: Mã giao dịch thanh toán gốc của ZaloPay (nhận về khi thanh toán thành công)
+// - amount: Số tiền hoàn lại cho khách hàng (định dạng số nguyên)
+// - description: Lý do hoàn tiền (hiển thị trên ứng dụng ví ZaloPay của khách hàng)
+function refundZaloPay(zpTransId, amount, description) {
+  return new Promise((resolve, reject) => {
+    const appId = 2553; // AppId môi trường thử nghiệm (Sandbox) của ZaloPay
+    
+    // Key2: Khóa bảo mật dùng để xác thực các yêu cầu nhạy cảm như Hoàn tiền hoặc xác minh Callback.
+    // LƯU Ý BẢO MẬT: Key2 chỉ được lưu trên Server và tuyệt đối KHÔNG đưa vào mã nguồn App Client tránh dịch ngược.
+    const key2 = "k95z60wqMwHssEDWKEOvS5SsaDOtZz5C"; 
+    
+    const timestamp = Date.now();
+    
+    // m_refund_id: Mã định danh duy nhất cho mỗi yêu cầu hoàn tiền.
+    // Định dạng bắt buộc của ZaloPay: yymmdd_appid_uniqueid (Độ dài tối đa 40 ký tự).
+    const yymmdd = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+    const mRefundId = `${yymmdd}_2553_${timestamp}`;
+    
+    // Tạo chuỗi data để tính MAC: app_id|zp_trans_id|amount|description|timestamp
+    const dataToMac = `${appId}|${zpTransId}|${amount}|${description}|${timestamp}`;
+    
+    // Sử dụng thuật toán mã hóa HMAC-SHA256 kết hợp với Key2 để sinh chữ ký MAC bảo mật
+    const mac = crypto.createHmac("sha256", key2).update(dataToMac).digest("hex");
+
+    // Đóng gói tham số gửi sang cổng ZaloPay bằng định dạng x-www-form-urlencoded
+    const postData = new URLSearchParams({
+      app_id: appId,
+      m_refund_id: mRefundId,
+      zp_trans_id: zpTransId,
+      amount: amount,
+      timestamp: timestamp,
+      description: description,
+      mac: mac,
+    }).toString();
+
+    const options = {
+      hostname: "sb-openapi.zalopay.vn",
+      port: 443,
+      path: "/v2/refund",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": Buffer.byteLength(postData),
+      },
+    };
+
+    // Gửi yêu cầu HTTPS Request lên ZaloPay API cổng Sandbox
+    const req = https.request(options, (res) => {
+      let body = "";
+      res.on("data", (chunk) => body += chunk);
+      res.on("end", () => {
+        try {
+          resolve(JSON.parse(body));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+
+    req.on("error", (e) => reject(e));
+    req.write(postData);
+    req.end();
+  });
+}
+
 // Hàm sinh mã giao dịch ZaloPay định dạng yyMMdd_timestamp_random
 function getAppTransId() {
   const date = new Date();
@@ -252,6 +319,7 @@ router.post("/create-order", authenticateToken, async (req, res) => {
     const userDoc = userId ? await User.findById(userId) : null;
 
     let discountAmount = 0;
+    let zpTransIdVal = "";
     if (paymentMethod === "ZaloPay") {
       if (!appTransId) {
         return res.status(400).json({ code: 400, message: "Thiếu mã giao dịch ZaloPay (appTransId)" });
@@ -284,6 +352,7 @@ router.post("/create-order", authenticateToken, async (req, res) => {
         }
 
         discountAmount = Number(queryResult.discount_amount || 0);
+        zpTransIdVal = String(queryResult.zp_trans_id || "");
       } catch (err) {
         console.error("Lỗi khi truy vấn đơn hàng ZaloPay:", err);
         return res.status(500).json({ code: 500, message: "Lỗi máy chủ khi xác thực thanh toán ZaloPay" });
@@ -305,6 +374,7 @@ router.post("/create-order", authenticateToken, async (req, res) => {
       receiverPhone: userDoc ? userDoc.phone : "",
       deliveryAddress: userDoc ? userDoc.address : "",
       appTransId: paymentMethod === "ZaloPay" ? appTransId : undefined,
+      zpTransId: zpTransIdVal || "",
     });
 
     const savedOrder = await newOrder.save();
@@ -637,6 +707,39 @@ router.post("/cancel-order", authenticateToken, async (req, res) => {
     }
 
     if (order.status !== "Đã hủy") {
+      // BƯỚC 1: Kiểm tra xem đơn hàng có thanh toán qua ví điện tử ZaloPay không
+      if (order.paymentMethod === "ZaloPay") {
+        let zpTransId = order.zpTransId;
+
+        // BƯỚC 1.1: Cơ chế phòng hờ (Fallback) cho các đơn hàng cũ tạo trước đó chưa lưu zpTransId.
+        // Thực hiện gọi hàm query trạng thái từ ZaloPay bằng mã appTransId để truy xuất mã zp_trans_id gốc.
+        if (!zpTransId && order.appTransId) {
+          try {
+            const queryResult = await queryZaloPayOrder(order.appTransId);
+            if (queryResult && queryResult.return_code === 1) {
+              zpTransId = queryResult.zp_trans_id;
+              order.zpTransId = zpTransId; // Lưu lại vào đơn hàng để lần sau không cần truy vấn nữa
+            }
+          } catch (err) {
+            console.error("Lỗi khi tìm zpTransId cho đơn hàng cũ:", err);
+          }
+        }
+
+        // BƯỚC 1.2: Nếu có mã giao dịch zpTransId từ ZaloPay, bắt đầu gửi yêu cầu hoàn tiền
+        if (zpTransId) {
+          try {
+            const refundRes = await refundZaloPay(
+              zpTransId,
+              order.totalAmount,
+              "Hoan tien huy don: " + (reason || "Khach hang huy")
+            );
+            console.log("ZaloPay refund response:", refundRes);
+          } catch (refundErr) {
+            console.error("Lỗi khi gọi API hoàn tiền ZaloPay:", refundErr);
+          }
+        }
+      }
+
       order.status = "Đã hủy";
       order.cancelReason = reason || "";
       await order.save();

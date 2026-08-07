@@ -89,6 +89,11 @@ const orderSchema = new mongoose.Schema(
       unique: true,
       sparse: true,
     },
+    // Mã giao dịch ZaloPay hệ thống (zp_trans_id)
+    zpTransId: {
+      type: String,
+      default: "",
+    },
     // Họ tên người nhận hàng
     receiverName: {
       type: String,
