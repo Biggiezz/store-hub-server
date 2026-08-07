@@ -22,6 +22,30 @@ const ORDER_STATUSES = [
   "Đã hủy",
 ];
 
+function normalizeStatus(status) {
+  if (!status) return "Chờ xác nhận";
+  const s = status.trim().toLowerCase();
+  if (s.includes("chờ xác nhận") || s.includes("pending") || s.includes("chờ xử lý")) {
+    return "Chờ xác nhận";
+  }
+  if (s.includes("đã xác nhận") || s.includes("confirmed")) {
+    return "Đã xác nhận";
+  }
+  if (s.includes("đã rời kho") || s.includes("left warehouse") || s.includes("dispatched")) {
+    return "Đã rời kho";
+  }
+  if (s.includes("đang giao hàng") || s.includes("shipping") || s.includes("delivering")) {
+    return "Đang giao hàng";
+  }
+  if (s.includes("đã hoàn thành") || s.includes("completed") || s.includes("done")) {
+    return "Đã hoàn thành";
+  }
+  if (s.includes("đã hủy") || s.includes("cancelled") || s.includes("cancel")) {
+    return "Đã hủy";
+  }
+  return "Chờ xác nhận";
+}
+
 function mapOrderForResponse(order) {
   const orderObject = order.toObject();
   const populatedUser =
@@ -525,7 +549,58 @@ router.put(
         });
       }
 
+      // Ràng buộc quy trình chuyển trạng thái của Admin
+      const currentStatus = orderCheck.status;
+      const normalizedCurrent = normalizeStatus(currentStatus);
+      const normalizedNew = normalizeStatus(status);
+
+      if (normalizedCurrent === "Đã hoàn thành" || normalizedCurrent === "Đã hủy") {
+        return res.status(400).json({
+          code: 400,
+          message: "Đơn hàng đã ở trạng thái cuối cùng, không thể cập nhật nữa!",
+          data: null,
+        });
+      }
+
+      let isAllowed = false;
+      if (normalizedNew === "Đã hủy") {
+        // Chỉ có superadmin mới được phép hủy đơn hàng
+        const userRole = (req.user.role || "").trim().toLowerCase();
+        if (userRole !== "superadmin") {
+          return res.status(403).json({
+            code: 403,
+            message: "Chỉ có Super Admin mới có quyền hủy đơn hàng!",
+            data: null,
+          });
+        }
+        // Super Admin cũng không được phép hủy khi hàng đã xuất kho
+        if (normalizedCurrent !== "Chờ xác nhận" && normalizedCurrent !== "Đã xác nhận") {
+          return res.status(400).json({
+            code: 400,
+            message: "Đơn hàng đã được xuất kho, không thể hủy đơn hàng này nữa!",
+            data: null,
+          });
+        }
+        isAllowed = true;
+      } else {
+        if (normalizedCurrent === "Chờ xác nhận" && normalizedNew === "Đã xác nhận") isAllowed = true;
+        if (normalizedCurrent === "Đã xác nhận" && normalizedNew === "Đã rời kho") isAllowed = true;
+        if (normalizedCurrent === "Đã rời kho" && normalizedNew === "Đang giao hàng") isAllowed = true;
+        if (normalizedCurrent === "Đang giao hàng" && normalizedNew === "Đã hoàn thành") isAllowed = true;
+      }
+
+      if (!isAllowed) {
+        return res.status(400).json({
+          code: 400,
+          message: `Không thể chuyển trạng thái từ '${currentStatus}' sang '${status}'!`,
+          data: null,
+        });
+      }
+
       const updateFields = { status, ...getStatusTimestamp(status) };
+      if (normalizedNew === "Đã hủy") {
+        updateFields.cancelReason = "Đơn hàng bị hủy bởi người bán";
+      }
       if (status === "Đã hủy" && orderCheck.status !== "Đã hủy") {
         if (orderCheck.paymentMethod === "ZaloPay") {
           let zpTransId = orderCheck.zpTransId;
@@ -729,11 +804,19 @@ router.post("/cancel-order", authenticateToken, async (req, res) => {
     }
 
     const userRole = (req.user.role || "").trim().toLowerCase();
-    const isAdmin = ADMIN_ROLES.includes(userRole);
+    const isSuperAdmin = userRole === "superadmin";
     const isOwner = order.user && order.user.toString() === req.user.id.toString();
 
-    if (!isAdmin && !isOwner) {
-      return res.status(403).json({ code: 403, message: "Bạn không có quyền hủy đơn hàng này" });
+    if (!isSuperAdmin && !isOwner) {
+      return res.status(403).json({ code: 403, message: "Chỉ có Super Admin hoặc người mua mới có quyền hủy đơn hàng này!" });
+    }
+
+    const normalizedStatus = normalizeStatus(order.status);
+    if (normalizedStatus !== "Chờ xác nhận" && normalizedStatus !== "Đã xác nhận") {
+      return res.status(400).json({
+        code: 400,
+        message: "Đơn hàng đã được xuất kho, không thể hủy đơn hàng này nữa!",
+      });
     }
 
     if (order.status !== "Đã hủy") {
@@ -771,7 +854,7 @@ router.post("/cancel-order", authenticateToken, async (req, res) => {
       }
 
       order.status = "Đã hủy";
-      order.cancelReason = reason || "";
+      order.cancelReason = isSuperAdmin ? ("Đơn hàng bị hủy bởi người bán" + (reason ? `: ${reason}` : "")) : (reason || "");
       await order.save();
 
       // Hoàn trả lại số lượng tồn kho cho các sản phẩm trong đơn

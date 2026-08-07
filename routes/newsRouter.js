@@ -105,13 +105,15 @@ router.get(
       // Nếu không truyền, mặc định sẽ là Trang 1 và lấy tối đa 10 bài viết quản trị.
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
-
-      // Tính số lượng bài viết cần bỏ qua để nhảy tới trang yêu cầu
       const skip = (page - 1) * limit;
+      const status = req.query.status;
 
-      // Admin lấy tất cả các bài viết không phân biệt trạng thái (bao gồm cả draft, hidden),
-      // sắp xếp mới nhất lên đầu, bỏ qua số lượng skip và giới hạn lấy ra số lượng limit bản ghi.
-      const allNews = await News.find({})
+      let query = {};
+      if (status) {
+        query.status = status;
+      }
+
+      const allNews = await News.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit);

@@ -570,10 +570,43 @@ router.get("/admin/revenue-stats", async (req, res) => {
   }
 });
 
-// Lấy danh sách toàn bộ người dùng
+// Lấy danh sách toàn bộ người dùng (hỗ trợ phân trang, lọc theo type và search)
 router.get("/get-all-users", authenticateToken, authorizeRoles("admin", "superadmin"), async (req, res) => {
   try {
-    const users = await User.find({}).sort({ createdAt: -1 });
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    const type = req.query.type; // 'customer' hoặc 'staff'
+    const search = req.query.search || "";
+
+    // 1. Tính toán tổng số lượng nhân viên và khách hàng để trả về trong Headers
+    const totalStaff = await User.countDocuments({ role: { $in: ["admin", "superadmin"] } });
+    const totalCustomers = await User.countDocuments({ role: { $in: ["customer", "khách hàng"] } });
+
+    res.setHeader("X-Total-Staff", String(totalStaff));
+    res.setHeader("X-Total-Customers", String(totalCustomers));
+    res.setHeader("Access-Control-Expose-Headers", "X-Total-Staff, X-Total-Customers");
+
+    // 2. Xây dựng điều kiện truy vấn
+    let query = {};
+    if (type === "customer") {
+      query.role = { $in: ["customer", "khách hàng"] };
+    } else if (type === "staff") {
+      query.role = { $in: ["admin", "superadmin"] };
+    }
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } }
+      ];
+    }
+
+    const users = await User.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
     return res.status(200).json({
       code: 200,
       message: "Lấy danh sách người dùng thành công",
