@@ -527,6 +527,37 @@ router.put(
       }
 
       const updateFields = { status, ...getStatusTimestamp(status) };
+      if (status === "Đã hủy" && orderCheck.status !== "Đã hủy") {
+        if (orderCheck.paymentMethod === "ZaloPay") {
+          let zpTransId = orderCheck.zpTransId;
+          if (!zpTransId && orderCheck.appTransId) {
+            try {
+              const queryResult = await queryZaloPayOrder(orderCheck.appTransId);
+              if (queryResult && queryResult.return_code === 1) {
+                zpTransId = queryResult.zp_trans_id;
+                orderCheck.zpTransId = zpTransId;
+                await orderCheck.save();
+              }
+            } catch (err) {
+              console.error("Lỗi khi tìm zpTransId cho đơn hàng cũ (Admin):", err);
+            }
+          }
+
+          if (zpTransId) {
+            try {
+              const refundRes = await refundZaloPay(
+                zpTransId,
+                orderCheck.totalAmount,
+                "Hoan tien huy don (Admin): Admin huy don"
+              );
+              console.log("ZaloPay refund response (Admin):", refundRes);
+            } catch (refundErr) {
+              console.error("Lỗi khi gọi API hoàn tiền ZaloPay (Admin):", refundErr);
+            }
+          }
+        }
+      }
+
       if (orderCheck.user) {
         if ((!orderCheck.receiverName || orderCheck.receiverName.trim() === "") && orderCheck.user.name) {
           updateFields.receiverName = orderCheck.user.name;
@@ -776,6 +807,42 @@ router.post("/update-status", authenticateToken, authorizeRoles(...ADMIN_ROLES),
     const { orderId, status } = req.body;
     if (!orderId || !status) {
       return res.status(400).json({ code: 400, message: "Thiếu mã đơn hàng hoặc trạng thái" });
+    }
+
+    const orderCheck = await Order.findById(orderId);
+    if (!orderCheck) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy đơn hàng" });
+    }
+
+    if (status === "Đã hủy" && orderCheck.status !== "Đã hủy") {
+      if (orderCheck.paymentMethod === "ZaloPay") {
+        let zpTransId = orderCheck.zpTransId;
+        if (!zpTransId && orderCheck.appTransId) {
+          try {
+            const queryResult = await queryZaloPayOrder(orderCheck.appTransId);
+            if (queryResult && queryResult.return_code === 1) {
+              zpTransId = queryResult.zp_trans_id;
+              orderCheck.zpTransId = zpTransId;
+              await orderCheck.save();
+            }
+          } catch (err) {
+            console.error("Lỗi khi tìm zpTransId cho đơn hàng cũ (Admin update-status):", err);
+          }
+        }
+
+        if (zpTransId) {
+          try {
+            const refundRes = await refundZaloPay(
+              zpTransId,
+              orderCheck.totalAmount,
+              "Hoan tien huy don (Admin update-status): Admin huy don"
+            );
+            console.log("ZaloPay refund response (Admin update-status):", refundRes);
+          } catch (refundErr) {
+            console.error("Lỗi khi gọi API hoàn tiền ZaloPay (Admin update-status):", refundErr);
+          }
+        }
+      }
     }
 
     const updateFields = { status, ...getStatusTimestamp(status) };
