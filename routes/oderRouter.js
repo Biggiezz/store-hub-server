@@ -113,6 +113,96 @@ function queryZaloPayOrder(appTransId) {
   });
 }
 
+// Hàm sinh mã giao dịch ZaloPay định dạng yyMMdd_timestamp_random
+function getAppTransId() {
+  const date = new Date();
+  const yy = String(date.getFullYear()).slice(-2);
+  const MM = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const HH = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  const ss = String(date.getSeconds()).padStart(2, "0");
+  const randomSuffix = String(Math.floor(Math.random() * 1000000)).padStart(6, "0");
+  return `${yy}${MM}${dd}_${HH}${mm}${ss}${randomSuffix}`;
+}
+
+// POST create ZaloPay transaction token securely
+router.post("/create-zalopay-order", authenticateToken, async (req, res) => {
+  try {
+    const { amount } = req.body;
+    if (!amount) {
+      return res.status(400).json({ code: 400, message: "Thiếu số tiền cần thanh toán" });
+    }
+
+    const appId = 2553;
+    const key1 = "PcY4iZIKFCIdgZvA6ueMcMHHUbRLYjPL";
+    const appTransId = getAppTransId();
+    const appTime = Date.now();
+    const embedData = "{}";
+    const items = "[]";
+    const bankCode = "zalopayapp";
+    const description = `Merchant pay for order #${appTransId}`;
+
+    // Tạo mã MAC: appId|appTransId|appUser|amount|appTime|embedData|item
+    const dataToMac = `${appId}|${appTransId}|Android_Demo|${amount}|${appTime}|${embedData}|${items}`;
+    const mac = crypto.createHmac("sha256", key1).update(dataToMac).digest("hex");
+
+    const postData = new URLSearchParams({
+      app_id: appId,
+      app_user: "Android_Demo",
+      app_time: appTime,
+      amount: amount,
+      app_trans_id: appTransId,
+      embed_data: embedData,
+      item: items,
+      bank_code: bankCode,
+      description: description,
+      mac: mac
+    }).toString();
+
+    const options = {
+      hostname: "sb-openapi.zalopay.vn",
+      port: 443,
+      path: "/v2/create",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Length": Buffer.byteLength(postData)
+      }
+    };
+
+    const request = https.request(options, (zaloRes) => {
+      let body = "";
+      zaloRes.on("data", (chunk) => body += chunk);
+      zaloRes.on("end", () => {
+        try {
+          const parsed = JSON.parse(body);
+          res.status(200).json({
+            code: 200,
+            message: "Tạo giao dịch ZaloPay thành công",
+            data: {
+              ...parsed,
+              app_trans_id: appTransId
+            }
+          });
+        } catch (e) {
+          res.status(500).json({ code: 500, message: "Lỗi phân tích kết quả ZaloPay", error: e.message });
+        }
+      });
+    });
+
+    request.on("error", (e) => {
+      res.status(500).json({ code: 500, message: "Lỗi kết nối ZaloPay", error: e.message });
+    });
+
+    request.write(postData);
+    request.end();
+
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
 // POST create order from cart
 router.post("/create-order", authenticateToken, async (req, res) => {
   try {
@@ -141,19 +231,62 @@ router.post("/create-order", authenticateToken, async (req, res) => {
       };
     });
 
+    // 1. Kiểm tra tồn kho trước khi đặt hàng
+    for (const item of cartItems) {
+      const product = await Product.findById(item.productId);
+      if (!product) {
+        return res.status(404).json({
+          code: 404,
+          message: `Không tìm thấy sản phẩm với ID: ${item.productId}`,
+        });
+      }
+      if (product.stock < item.quantity) {
+        return res.status(400).json({
+          code: 400,
+          message: `Số lượng sản phẩm "${product.name}" không đủ`,
+        });
+      }
+    }
+
     const orderCode = `#SH-${Date.now().toString().slice(-6)}`;
     const userDoc = userId ? await User.findById(userId) : null;
 
     let discountAmount = 0;
-    if (paymentMethod === "ZaloPay" && appTransId) {
+    if (paymentMethod === "ZaloPay") {
+      if (!appTransId) {
+        return res.status(400).json({ code: 400, message: "Thiếu mã giao dịch ZaloPay (appTransId)" });
+      }
+
+      // Kiểm tra trùng lặp mã giao dịch (Chống Replay Attack)
+      const existingOrder = await Order.findOne({ appTransId });
+      if (existingOrder) {
+        return res.status(400).json({ code: 400, message: "Mã giao dịch ZaloPay này đã được sử dụng" });
+      }
+
       try {
         const queryResult = await queryZaloPayOrder(appTransId);
         console.log("ZaloPay query result:", queryResult);
-        if (queryResult && queryResult.return_code === 1) {
-          discountAmount = Number(queryResult.discount_amount || 0);
+
+        if (!queryResult || queryResult.return_code !== 1) {
+          return res.status(400).json({
+            code: 400,
+            message: `Xác thực thanh toán ZaloPay thất bại: ${queryResult ? queryResult.return_message : "Không nhận được phản hồi từ ZaloPay"}`
+          });
         }
+
+        // Đối chiếu số tiền thanh toán (Số tiền ZaloPay nhận = totalPrice + ship 40.000)
+        const expectedAmount = totalPrice + 40000;
+        if (Number(queryResult.amount) !== expectedAmount) {
+          return res.status(400).json({
+            code: 400,
+            message: `Số tiền thanh toán ZaloPay không khớp. Yêu cầu: ${expectedAmount}, Thực nhận: ${queryResult.amount}`
+          });
+        }
+
+        discountAmount = Number(queryResult.discount_amount || 0);
       } catch (err) {
         console.error("Lỗi khi truy vấn đơn hàng ZaloPay:", err);
+        return res.status(500).json({ code: 500, message: "Lỗi máy chủ khi xác thực thanh toán ZaloPay" });
       }
     }
 
@@ -171,6 +304,7 @@ router.post("/create-order", authenticateToken, async (req, res) => {
       receiverName: userDoc ? userDoc.name : "",
       receiverPhone: userDoc ? userDoc.phone : "",
       deliveryAddress: userDoc ? userDoc.address : "",
+      appTransId: paymentMethod === "ZaloPay" ? appTransId : undefined,
     });
 
     const savedOrder = await newOrder.save();
@@ -388,6 +522,17 @@ router.put(
       const oldQuantity = item.quantity;
       const quantityDiff = newQuantity - oldQuantity;
 
+      // Kiểm tra tồn kho trước khi tăng số lượng
+      if (quantityDiff > 0) {
+        const product = await Product.findById(productId);
+        if (!product || product.stock < quantityDiff) {
+          return res.status(400).json({
+            code: 400,
+            message: "Số lượng sản phẩm không đủ"
+          });
+        }
+      }
+
       // Cập nhật tồn kho của sản phẩm
       // Nếu số lượng mới > số lượng cũ, trừ bớt tồn kho (giảm stock)
       // Nếu số lượng mới < số lượng cũ, cộng lại vào tồn kho (tăng stock)
@@ -485,7 +630,7 @@ router.post("/cancel-order", authenticateToken, async (req, res) => {
 
     const userRole = (req.user.role || "").trim().toLowerCase();
     const isAdmin = ADMIN_ROLES.includes(userRole);
-    const isOwner = order.user && order.user.toString() === req.user._id.toString();
+    const isOwner = order.user && order.user.toString() === req.user.id.toString();
 
     if (!isAdmin && !isOwner) {
       return res.status(403).json({ code: 403, message: "Bạn không có quyền hủy đơn hàng này" });

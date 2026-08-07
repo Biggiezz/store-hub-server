@@ -83,6 +83,12 @@ const orderSchema = new mongoose.Schema(
       enum: ["ZaloPay", "COD"],
       default: "COD",
     },
+    // Mã giao dịch ZaloPay (để xác thực và chống Replay Attack)
+    appTransId: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
     // Họ tên người nhận hàng
     receiverName: {
       type: String,
