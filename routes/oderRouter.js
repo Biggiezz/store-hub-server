@@ -122,9 +122,8 @@ function refundZaloPay(zpTransId, amount, description) {
   return new Promise((resolve, reject) => {
     const appId = 2553; // AppId môi trường thử nghiệm (Sandbox) của ZaloPay
     
-    // Key2: Khóa bảo mật dùng để xác thực các yêu cầu nhạy cảm như Hoàn tiền hoặc xác minh Callback.
-    // LƯU Ý BẢO MẬT: Key2 chỉ được lưu trên Server và tuyệt đối KHÔNG đưa vào mã nguồn App Client tránh dịch ngược.
-    const key2 = "k95z60wqMwHssEDWKEOvS5SsaDOtZz5C"; 
+    // Key1: Khóa bảo mật dùng để ký chữ ký MAC khi gửi các yêu cầu tạo giao dịch/hoàn tiền lên ZaloPay.
+    const key1 = "PcY4iZIKFCIdgZvA6ueMcMHHUbRLYjPL"; 
     
     const timestamp = Date.now();
     
@@ -136,8 +135,8 @@ function refundZaloPay(zpTransId, amount, description) {
     // Tạo chuỗi data để tính MAC: app_id|zp_trans_id|amount|description|timestamp
     const dataToMac = `${appId}|${zpTransId}|${amount}|${description}|${timestamp}`;
     
-    // Sử dụng thuật toán mã hóa HMAC-SHA256 kết hợp với Key2 để sinh chữ ký MAC bảo mật
-    const mac = crypto.createHmac("sha256", key2).update(dataToMac).digest("hex");
+    // Sử dụng thuật toán mã hóa HMAC-SHA256 kết hợp với Key1 để sinh chữ ký MAC bảo mật
+    const mac = crypto.createHmac("sha256", key1).update(dataToMac).digest("hex");
 
     // Đóng gói tham số gửi sang cổng ZaloPay bằng định dạng x-www-form-urlencoded
     const postData = new URLSearchParams({
