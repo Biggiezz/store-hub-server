@@ -688,7 +688,6 @@ router.post("/shipping-quote", authenticateToken, async (req, res) => {
 // POST /api/productsRouter/checkout - Thanh toán giỏ hàng và tạo Đơn hàng
 router.post("/checkout", authenticateToken, async (req, res) => {
   try {
-    const Order = require("../models/Order");
     const cartItems = await Cart.find({ userId: req.user.id });
 
     if (cartItems.length === 0) {

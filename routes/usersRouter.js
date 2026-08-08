@@ -375,11 +375,6 @@ router.put("/change-password", authenticateToken, async (req, res) => {
 // Lấy dữ liệu thống kê tổng quan cho Admin (AdminHomeFragment)
 router.get("/admin/dashboard", async (req, res) => {
   try {
-    const Product = require("../models/Product");
-const mongoose = require("mongoose");
-
-const ADMIN_ROLES = ["admin", "superadmin", "quản lý cửa hàng", "quản trị viên tối cao", "quản trị viên"];
-    const Order = require("../models/Order");
 
     const [
       totalUsers,
@@ -434,11 +429,6 @@ const ADMIN_ROLES = ["admin", "superadmin", "quản lý cửa hàng", "quản tr
 // Lấy dữ liệu thống kê doanh thu theo thời gian từ Đơn hàng đã thanh toán
 router.get("/admin/revenue-stats", async (req, res) => {
   try {
-    const Order = require("../models/Order");
-    const Product = require("../models/Product");
-const mongoose = require("mongoose");
-
-const ADMIN_ROLES = ["admin", "superadmin", "quản lý cửa hàng", "quản trị viên tối cao", "quản trị viên"];
     const period = parseInt(req.query.period) || 0;
     const parsedActivityLimit = parseInt(req.query.activityLimit, 10);
     const activityLimit =
@@ -983,34 +973,8 @@ router.put(
   },
 );
 
-// GET user by ID
-router.get("/get-user-by-id/:id", async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-    if (!user) {
-      return res.status(404).json({
-        code: 404,
-        message: "Không tìm thấy người dùng",
-        data: null,
-      });
-    }
-    const userObj = user.toObject();
-    delete userObj.password;
-    res.status(200).json({
-      code: 200,
-      message: "Lấy thông tin người dùng thành công",
-      data: userObj,
-    });
-  } catch (error) {
-    res.status(500).json({ code: 500, message: error.message, data: null });
-  }
-});
-// Xoá người dùng bất kỳ (Chỉ Super Admin có quyền thực hiện)
+// Xoá người dùng (Chỉ Super Admin có quyền xóa Admin, không xóa Khách hàng hoặc Super Admin khác)
 router.delete("/delete-user/:id", authenticateToken, authorizeRoles("superadmin", "quản trị viên tối cao"), async (req, res) => {
-  console.log("--- DEBUG DELETE USER ---");
-  console.log("User role:", req.user?.role);
-  console.log("ID mục tiêu xóa:", req.params.id);
-
   try {
     const userId = req.params.id;
     if (!mongoose.Types.ObjectId.isValid(userId)) {
@@ -1025,6 +989,17 @@ router.delete("/delete-user/:id", authenticateToken, authorizeRoles("superadmin"
     // Không cho phép tự xóa chính mình
     if (String(req.user.id) === String(userId)) {
       return res.status(400).json({ code: 400, message: "Bạn không thể tự xóa chính mình" });
+    }
+
+    // Chỉ cho phép xóa tài khoản Admin (admin, quản lý cửa hàng, quản trị viên), không cho xóa customer hoặc superadmin khác
+    const targetRoleNormalized = String(userToDelete.role || "").replace(/\s+/g, "").toLowerCase();
+    const deletableRoles = ["admin", "quảnlýcửahàng", "quảntrịviên"];
+
+    if (!deletableRoles.includes(targetRoleNormalized)) {
+      return res.status(403).json({
+        code: 403,
+        message: "Chỉ được phép xóa tài khoản Admin, không thể xóa khách hàng hoặc Quản trị viên tối cao khác."
+      });
     }
 
     await User.findByIdAndDelete(userId);
