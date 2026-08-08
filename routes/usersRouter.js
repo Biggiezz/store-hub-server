@@ -8,6 +8,9 @@ const upload = require("../middlewares/upload");
 const ActivityLog = require("../models/ActivityLog");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
+const mongoose = require("mongoose");
+
+const ADMIN_ROLES = ["admin", "superadmin", "quản lý cửa hàng", "quản trị viên tối cao", "quản trị viên"];
 
 // Đăng ký người dùng mới (Mặc định luôn là customer)
 router.post("/register", async (req, res) => {
@@ -373,6 +376,9 @@ router.put("/change-password", authenticateToken, async (req, res) => {
 router.get("/admin/dashboard", async (req, res) => {
   try {
     const Product = require("../models/Product");
+const mongoose = require("mongoose");
+
+const ADMIN_ROLES = ["admin", "superadmin", "quản lý cửa hàng", "quản trị viên tối cao", "quản trị viên"];
     const Order = require("../models/Order");
 
     const [
@@ -430,6 +436,9 @@ router.get("/admin/revenue-stats", async (req, res) => {
   try {
     const Order = require("../models/Order");
     const Product = require("../models/Product");
+const mongoose = require("mongoose");
+
+const ADMIN_ROLES = ["admin", "superadmin", "quản lý cửa hàng", "quản trị viên tối cao", "quản trị viên"];
     const period = parseInt(req.query.period) || 0;
     const parsedActivityLimit = parseInt(req.query.activityLimit, 10);
     const activityLimit =
@@ -571,16 +580,17 @@ router.get("/admin/revenue-stats", async (req, res) => {
 });
 
 // Lấy danh sách toàn bộ người dùng (hỗ trợ phân trang, lọc theo type và search)
-router.get("/get-all-users", authenticateToken, authorizeRoles("admin", "superadmin"), async (req, res) => {
+router.get("/get-all-users", authenticateToken, authorizeRoles(...ADMIN_ROLES), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
     const type = req.query.type; // 'customer' hoặc 'staff'
     const search = req.query.search || "";
+    const userRole = String(req.user.role || "").trim().toLowerCase();
 
     // 1. Tính toán tổng số lượng nhân viên và khách hàng để trả về trong Headers
-    const totalStaff = await User.countDocuments({ role: { $in: ["admin", "superadmin"] } });
+    const totalStaff = await User.countDocuments({ role: { $in: ADMIN_ROLES } });
     const totalCustomers = await User.countDocuments({ role: { $in: ["customer", "khách hàng"] } });
 
     res.setHeader("X-Total-Staff", String(totalStaff));
@@ -592,7 +602,18 @@ router.get("/get-all-users", authenticateToken, authorizeRoles("admin", "superad
     if (type === "customer") {
       query.role = { $in: ["customer", "khách hàng"] };
     } else if (type === "staff") {
-      query.role = { $in: ["admin", "superadmin"] };
+      query.role = { $in: ADMIN_ROLES };
+    }
+
+    // Nếu là superadmin, ẩn các superadmin khác khỏi danh sách
+    if (userRole === "superadmin" || userRole === "quản trị viên tối cao") {
+      if (query.role) {
+        if (query.role.$in) {
+          query.role.$in = query.role.$in.filter(r => r !== "superadmin" && r !== "quản trị viên tối cao");
+        }
+      } else {
+        query.role = { $nin: ["superadmin", "quản trị viên tối cao"] };
+      }
     }
 
     if (search) {
@@ -606,7 +627,6 @@ router.get("/get-all-users", authenticateToken, authorizeRoles("admin", "superad
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
-
     return res.status(200).json({
       code: 200,
       message: "Lấy danh sách người dùng thành công",
@@ -906,11 +926,11 @@ router.post("/set-offline", authenticateToken, async (req, res) => {
   }
 });
 
-// Cập nhật thông tin người dùng bất kỳ (Chỉ có Super Admin mới có quyền thực hiện)
+// Cập nhật thông tin người dùng bất kỳ (Chỉ có Admin/Super Admin mới có quyền thực hiện)
 router.put(
   "/update-user/:id",
   authenticateToken,
-  authorizeRoles("superadmin"),
+  authorizeRoles(...ADMIN_ROLES),
   async (req, res) => {
     try {
       const { name, email, phone, role, password, address, image } = req.body;
@@ -985,4 +1005,33 @@ router.get("/get-user-by-id/:id", async (req, res) => {
     res.status(500).json({ code: 500, message: error.message, data: null });
   }
 });
+// Xoá người dùng bất kỳ (Chỉ Super Admin có quyền thực hiện)
+router.delete("/delete-user/:id", authenticateToken, authorizeRoles("superadmin", "quản trị viên tối cao"), async (req, res) => {
+  console.log("--- DEBUG DELETE USER ---");
+  console.log("User role:", req.user?.role);
+  console.log("ID mục tiêu xóa:", req.params.id);
+
+  try {
+    const userId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ code: 400, message: "ID người dùng không hợp lệ" });
+    }
+
+    const userToDelete = await User.findById(userId);
+    if (!userToDelete) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng" });
+    }
+
+    // Không cho phép tự xóa chính mình
+    if (String(req.user.id) === String(userId)) {
+      return res.status(400).json({ code: 400, message: "Bạn không thể tự xóa chính mình" });
+    }
+
+    await User.findByIdAndDelete(userId);
+    res.status(200).json({ code: 200, message: "Xóa người dùng thành công" });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
 module.exports = router;
