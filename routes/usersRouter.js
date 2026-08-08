@@ -1009,4 +1009,32 @@ router.delete("/delete-user/:id", authenticateToken, authorizeRoles("superadmin"
   }
 });
 
+// Khách hàng tự xóa tài khoản (Yêu cầu nhập mật khẩu để xác thực)
+router.post("/delete-me", authenticateToken, async (req, res) => {
+  try {
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({ code: 400, message: "Vui lòng nhập mật khẩu để xác nhận xóa tài khoản." });
+    }
+
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng" });
+    }
+
+    // Kiểm tra mật khẩu
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ code: 400, message: "Mật khẩu không chính xác." });
+    }
+
+    // Tiến hành xóa cứng tài khoản người dùng
+    await User.findByIdAndDelete(userId);
+    res.status(200).json({ code: 200, message: "Xóa tài khoản thành công" });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
 module.exports = router;

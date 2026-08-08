@@ -814,20 +814,25 @@ router.delete("/delete-category/:id", authenticateToken, authorizeRoles(...ADMIN
   }
 });
 
-// DELETE product (Admin & Superadmin)
-router.delete("/delete-product/:id", authenticateToken, authorizeRoles(...ADMIN_ROLES), async (req, res) => {
+// DELETE product (Only Superadmin has right to delete/deactivate products)
+router.delete("/delete-product/:id", authenticateToken, authorizeRoles("superadmin", "quản trị viên tối cao"), async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm" });
     }
 
+    // Thực hiện xóa cứng sản phẩm khỏi Database
     await Product.findByIdAndDelete(req.params.id);
 
-    // Clear search cache
-    if (client?.isReady) {
-      const keys = await client.keys("search:v3:*");
-      if (keys.length > 0) await client.del(keys);
+    // Dọn dẹp cache tìm kiếm an toàn (tránh lỗi nghẽn/timeout trên môi trường Serverless)
+    try {
+      if (client?.isReady) {
+        const keys = await client.keys("search:v3:*");
+        if (keys.length > 0) await client.del(keys);
+      }
+    } catch (redisError) {
+      console.error("Lỗi xóa cache Redis khi xóa sản phẩm:", redisError);
     }
 
     res.status(200).json({ code: 200, message: "Xóa sản phẩm thành công" });
