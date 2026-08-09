@@ -18,27 +18,37 @@ const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
  */
 router.get("/get-all-news", async (req, res) => {
   try {
-    // Lấy thông số trang hiện tại (page) và giới hạn số bài (limit) từ Query String.
-    // Nếu không truyền, mặc định sẽ là Trang 1 và lấy tối đa 10 bài viết.
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-
-    // Tính số lượng bài viết cần bỏ qua để nhảy tới trang yêu cầu
     const skip = (page - 1) * limit;
 
-    // Chỉ truy vấn các bài viết có status là 'published', sắp xếp mới nhất lên đầu,
-    // bỏ qua số lượng skip và giới hạn lấy ra số lượng limit bản ghi.
-    const newsList = await News.find({ status: "published" })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+    // Hỗ trợ lọc theo status (mặc định published) và keyword
+    const status = req.query.status || "published";
+    const keyword = req.query.keyword || "";
+
+    const query = { status };
+    if (keyword) {
+      query.$or = [
+        { title: { $regex: keyword, $options: "i" } },
+        { content: { $regex: keyword, $options: "i" } }
+      ];
+    }
+
+    const [newsList, total] = await Promise.all([
+      News.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      News.countDocuments(query)
+    ]);
 
     return res.status(200).json({
       code: 200,
-      message: "Lấy danh sách bài viết phân trang thành công",
-      page: page,
-      limit: limit,
+      message: "Lấy danh sách bài viết thành công",
       data: newsList,
+      pagination: {
+        total,
+        currentPage: page,
+        totalPages: Math.ceil(total / limit),
+        limit
+      }
     });
   } catch (error) {
     return res.status(500).json({
