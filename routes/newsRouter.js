@@ -5,7 +5,6 @@ const News = require("../models/News");
 const { authenticateToken, authorizeRoles } = require("../middlewares/auth");
 const User = require("../models/users");
 const upload = require("../middlewares/upload");
-const cloudinary = require("../config/cloudinary");
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // ==========================================
@@ -221,6 +220,7 @@ router.post(
       });
     } finally {
       if (req.file && !savedNews && req.file.filename) {
+        const cloudinary = require("../config/cloudinary");
         cloudinary.uploader.destroy(req.file.filename, () => {});
       }
     }
