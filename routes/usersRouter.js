@@ -898,76 +898,43 @@ async function buildRecentActivities(limit = 10) {
 router.get("/admin/recent-activities", authenticateToken, authorizeRoles(...ADMIN_ROLES), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 15;
     const type = req.query.type || "all"; // all, order, product, user
     const keyword = req.query.keyword || "";
     const fromDate = req.query.fromDate;
     const toDate = req.query.toDate;
 
-    const dateQuery = {};
-    if (fromDate || toDate) {
-      dateQuery.createdAt = {};
-      if (fromDate) dateQuery.createdAt.$gte = new Date(fromDate);
-      if (toDate) dateQuery.createdAt.$lte = new Date(toDate);
+    let activities = await buildRecentActivities(0);
+
+    // Filter by type
+    if (type && type !== "all") {
+      activities = activities.filter(act => {
+        if (type === "order") return act.type && act.type.startsWith("order_");
+        if (type === "product") return act.type && act.type.startsWith("product_");
+        if (type === "user") return act.type && (act.type.startsWith("user_") || act.type.startsWith("login_"));
+        return true;
+      });
     }
 
-    let activities = [];
-
-    // Hàm format hoạt động
-    const formatActivity = (item, itemType) => {
-      if (itemType === "order") {
-        return {
-          type: "order_created",
-          title: `Đơn hàng ${item.orderCode || "Mới"}`,
-          detail: `${item.user?.name || "Khách"} · ${formatVND(item.totalAmount || 0)}`,
-          createdAt: toISOSafe(item.createdAt),
-          targetId: String(item._id)
-        };
-      }
-      if (itemType === "product") {
-        return {
-          type: "product_created",
-          title: `Sản phẩm: ${item.name}`,
-          detail: `Giá: ${formatVND(item.price)} · Kho: ${item.stock}`,
-          createdAt: toISOSafe(item.createdAt),
-          targetId: String(item._id),
-          productImage: item.image
-        };
-      }
-      if (itemType === "user") {
-        return {
-          type: "user_created",
-          title: `Thành viên: ${item.name}`,
-          detail: `Email: ${item.email}`,
-          createdAt: toISOSafe(item.createdAt),
-          targetId: String(item._id)
-        };
-      }
-    };
-
-    // Truy vấn song song tối ưu hiệu năng
-    const queries = [];
-    if (type === "order" || type === "all") {
-      const q = { ...dateQuery };
-      if (keyword) q.orderCode = { $regex: keyword, $options: "i" };
-      queries.push(Order.find(q).populate("user", "name").sort({ createdAt: -1 }).limit(page * limit).then(res => res.map(o => formatActivity(o, "order"))));
-    }
-    if (type === "product" || type === "all") {
-      const q = { ...dateQuery };
-      if (keyword) q.name = { $regex: keyword, $options: "i" };
-      queries.push(Product.find(q).sort({ createdAt: -1 }).limit(page * limit).then(res => res.map(p => formatActivity(p, "product"))));
-    }
-    if (type === "user" || type === "all") {
-      const q = { ...dateQuery };
-      if (keyword) q.name = { $regex: keyword, $options: "i" };
-      queries.push(User.find(q).sort({ createdAt: -1 }).limit(page * limit).then(res => res.map(u => formatActivity(u, "user"))));
+    // Filter by keyword
+    if (keyword) {
+      const kw = keyword.toLowerCase();
+      activities = activities.filter(act =>
+        (act.title && act.title.toLowerCase().includes(kw)) ||
+        (act.detail && act.detail.toLowerCase().includes(kw)) ||
+        (act.customerName && act.customerName.toLowerCase().includes(kw))
+      );
     }
 
-    const results = await Promise.all(queries);
-    activities = results.flat();
-
-    // Sắp xếp trộn và phân trang giả lập trên kết quả trộn
-    activities.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    // Filter by date
+    if (fromDate) {
+      const from = new Date(fromDate);
+      activities = activities.filter(act => new Date(act.createdAt) >= from);
+    }
+    if (toDate) {
+      const to = new Date(toDate);
+      activities = activities.filter(act => new Date(act.createdAt) <= to);
+    }
 
     const startIndex = (page - 1) * limit;
     const paginatedActivities = activities.slice(startIndex, startIndex + limit);
@@ -978,7 +945,8 @@ router.get("/admin/recent-activities", authenticateToken, authorizeRoles(...ADMI
       data: paginatedActivities,
       pagination: {
         currentPage: page,
-        limit: limit,
+        totalPages: Math.ceil(activities.length / limit) || 1,
+        totalItems: activities.length,
         hasMore: activities.length > startIndex + limit
       }
     });
