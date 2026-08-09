@@ -10,7 +10,7 @@ const multer = require("multer");
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const cloudinary = require("../config/cloudinary");
 const { authenticateToken, authorizeRoles } = require("../middlewares/auth");
-const ADMIN_ROLES = ["admin", "superadmin"];
+const ADMIN_ROLES = ["admin", "superadmin", "quản lý cửa hàng", "quản trị viên tối cao", "quản trị viên"];
 
 const redis = require("redis");
 let client = null;
@@ -688,7 +688,6 @@ router.post("/shipping-quote", authenticateToken, async (req, res) => {
 // POST /api/productsRouter/checkout - Thanh toán giỏ hàng và tạo Đơn hàng
 router.post("/checkout", authenticateToken, async (req, res) => {
   try {
-    const Order = require("../models/Order");
     const cartItems = await Cart.find({ userId: req.user.id });
 
     if (cartItems.length === 0) {
@@ -795,7 +794,7 @@ router.put("/update-category/:id", upload.single("image"), async (req, res) => {
 });
 
 // DELETE category
-router.delete("/delete-category/:id", async (req, res) => {
+router.delete("/delete-category/:id", authenticateToken, authorizeRoles(...ADMIN_ROLES), async (req, res) => {
   try {
     const category = await Category.findById(req.params.id);
     if (!category) {
@@ -810,6 +809,33 @@ router.delete("/delete-category/:id", async (req, res) => {
 
     await Category.findByIdAndDelete(req.params.id);
     res.status(200).json({ code: 200, message: "Xóa danh mục thành công" });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
+// DELETE product (Only Superadmin has right to delete/deactivate products)
+router.delete("/delete-product/:id", authenticateToken, authorizeRoles("superadmin", "quản trị viên tối cao"), async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm" });
+    }
+
+    // Thực hiện xóa cứng sản phẩm khỏi Database
+    await Product.findByIdAndDelete(req.params.id);
+
+    // Dọn dẹp cache tìm kiếm an toàn (tránh lỗi nghẽn/timeout trên môi trường Serverless)
+    try {
+      if (client?.isReady) {
+        const keys = await client.keys("search:v3:*");
+        if (keys.length > 0) await client.del(keys);
+      }
+    } catch (redisError) {
+      console.error("Lỗi xóa cache Redis khi xóa sản phẩm:", redisError);
+    }
+
+    res.status(200).json({ code: 200, message: "Xóa sản phẩm thành công" });
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message });
   }
