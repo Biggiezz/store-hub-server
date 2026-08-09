@@ -1,0 +1,27 @@
+
+> storehubserver@0.0.0 dev
+> nodemon ./bin/www
+
+[33m[nodemon] 3.1.14[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): *.*[39m
+[33m[nodemon] watching extensions: js,mjs,cjs,json[39m
+[32m[nodemon] starting `node ./bin/www`[39m
+◇ injected env (6) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+✅ Redis Connected Successfully
+MongoDB Connected: ac-dketxte-shard-00-02.krc7cvx.mongodb.net
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node ./bin/www`[39m
+[32m[nodemon] restarting due to changes...[39m
+◇ injected env (6) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+[32m[nodemon] starting `node ./bin/www`[39m
+◇ injected env (6) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+✅ Redis Connected Successfully
+MongoDB Connected: ac-dketxte-shard-00-00.krc7cvx.mongodb.net
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node ./bin/www`[39m
+◇ injected env (6) from .env // tip: ⌘ suppress logs { quiet: true }
+✅ Redis Connected Successfully
+MongoDB Connected: ac-dketxte-shard-00-00.krc7cvx.mongodb.net
+[31m[nodemon] app crashed - waiting for file changes before starting...[39m
