@@ -19,6 +19,7 @@ const ORDER_STATUSES = [
   "Đang giao hàng",
   "Đã giao hàng",
   "Đã hoàn thành",
+  "Khiếu nại",
   "Đã hủy",
 ];
 
@@ -37,13 +38,30 @@ function normalizeStatus(status) {
   if (s.includes("đang giao hàng") || s.includes("shipping") || s.includes("delivering")) {
     return "Đang giao hàng";
   }
+  if (s.includes("đã giao hàng") || s.includes("delivered")) {
+    return "Đã giao hàng";
+  }
   if (s.includes("đã hoàn thành") || s.includes("completed") || s.includes("done")) {
     return "Đã hoàn thành";
+  }
+  if (s.includes("khiếu nại") || s.includes("disputed") || s.includes("dispute") || s.includes("complain")) {
+    return "Khiếu nại";
   }
   if (s.includes("đã hủy") || s.includes("cancelled") || s.includes("cancel")) {
     return "Đã hủy";
   }
   return "Chờ xác nhận";
+}
+
+function getStatusTimestamp(status) {
+  const now = new Date();
+  if (status === "Đã xác nhận") return { confirmedAt: now };
+  if (status === "Đã rời kho") return { warehouseAt: now };
+  if (status === "Đang giao hàng") return { deliveringAt: now };
+  if (status === "Đã giao hàng") return { deliveredAt: now };
+  if (status === "Đã hoàn thành") return { completedAt: now };
+  if (status === "Khiếu nại") return { disputedAt: now };
+  return {};
 }
 
 function mapOrderForResponse(order) {
@@ -81,6 +99,28 @@ function mapOrderForResponse(order) {
   });
 
   return orderObject;
+}
+
+async function autoCompleteExpiredOrders() {
+  try {
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    const expiredOrders = await Order.find({
+      status: "Đã giao hàng",
+      deliveredAt: { $lte: threeDaysAgo }
+    });
+
+    if (expiredOrders.length > 0) {
+      console.log(`[Auto-Complete] Found ${expiredOrders.length} expired orders. Updating...`);
+      for (const order of expiredOrders) {
+        order.status = "Đã hoàn thành";
+        order.isCustomerConfirmed = true;
+        order.completedAt = order.deliveredAt ? new Date(order.deliveredAt.getTime() + 3 * 24 * 60 * 60 * 1000) : new Date();
+        await order.save();
+      }
+    }
+  } catch (err) {
+    console.error("Error in autoCompleteExpiredOrders:", err);
+  }
 }
 
 function getStatusTimestamp(status) {
@@ -428,6 +468,7 @@ router.post("/create-order", authenticateToken, async (req, res) => {
 // GET all orders
 router.get("/get-orders", authenticateToken, async (req, res) => {
   try {
+    await autoCompleteExpiredOrders();
     const orders = await Order.find({ user: req.user.id }).populate("user").sort({ createdAt: -1 });
 
     // Fallback to user profile info if order receiver fields are empty
@@ -464,6 +505,7 @@ router.get(
   authorizeRoles(...ADMIN_ROLES),
   async (req, res) => {
     try {
+      await autoCompleteExpiredOrders();
       const orders = await Order.find({})
         .populate("user", "name phone address email")
         .populate({
@@ -494,6 +536,7 @@ router.get(
   authorizeRoles(...ADMIN_ROLES),
   async (req, res) => {
     try {
+      await autoCompleteExpiredOrders();
       const order = await Order.findById(req.params.id)
         .populate("user", "name phone address email")
         .populate({
@@ -573,8 +616,8 @@ router.put(
             data: null,
           });
         }
-        // Super Admin cũng không được phép hủy khi hàng đã xuất kho
-        if (normalizedCurrent !== "Chờ xác nhận" && normalizedCurrent !== "Đã xác nhận") {
+        // Super Admin cũng không được phép hủy khi hàng đã xuất kho, trừ khi đơn hàng đang bị khiếu nại
+        if (normalizedCurrent !== "Chờ xác nhận" && normalizedCurrent !== "Đã xác nhận" && normalizedCurrent !== "Khiếu nại") {
           return res.status(400).json({
             code: 400,
             message: "Đơn hàng đã được xuất kho, không thể hủy đơn hàng này nữa!",
@@ -586,7 +629,9 @@ router.put(
         if (normalizedCurrent === "Chờ xác nhận" && normalizedNew === "Đã xác nhận") isAllowed = true;
         if (normalizedCurrent === "Đã xác nhận" && normalizedNew === "Đã rời kho") isAllowed = true;
         if (normalizedCurrent === "Đã rời kho" && normalizedNew === "Đang giao hàng") isAllowed = true;
-        if (normalizedCurrent === "Đang giao hàng" && normalizedNew === "Đã hoàn thành") isAllowed = true;
+        if (normalizedCurrent === "Đang giao hàng" && (normalizedNew === "Đã giao hàng" || normalizedNew === "Đã hoàn thành")) isAllowed = true;
+        if (normalizedCurrent === "Đã giao hàng" && (normalizedNew === "Đã hoàn thành" || normalizedNew === "Khiếu nại")) isAllowed = true;
+        if (normalizedCurrent === "Khiếu nại" && (normalizedNew === "Đang giao hàng" || normalizedNew === "Đã hoàn thành")) isAllowed = true;
       }
 
       if (!isAllowed) {
@@ -598,6 +643,9 @@ router.put(
       }
 
       const updateFields = { status, ...getStatusTimestamp(status) };
+      if (status === "Đã hoàn thành" && normalizeStatus(orderCheck.status) === "Khiếu nại") {
+        updateFields.isCustomerConfirmed = true;
+      }
       if (normalizedNew === "Đã hủy") {
         updateFields.cancelReason = "Đơn hàng bị hủy bởi người bán";
       }
@@ -928,6 +976,9 @@ router.post("/update-status", authenticateToken, authorizeRoles(...ADMIN_ROLES),
     }
 
     const updateFields = { status, ...getStatusTimestamp(status) };
+    if (status === "Đã hoàn thành" && normalizeStatus(orderCheck.status) === "Khiếu nại") {
+      updateFields.isCustomerConfirmed = true;
+    }
 
     const result = await Order.updateOne(
       { _id: orderId },
@@ -949,9 +1000,95 @@ router.post("/update-status", authenticateToken, authorizeRoles(...ADMIN_ROLES),
     res.status(500).json({ code: 500, message: error.message });
   }
 });
+// POST confirm receipt of order
+router.post("/confirm-receipt", authenticateToken, async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    if (!orderId) {
+      return res.status(400).json({ code: 400, message: "Thiếu mã đơn hàng" });
+    }
 
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy đơn hàng" });
+    }
 
+    const isOwner = order.user && order.user.toString() === req.user.id.toString();
+    if (!isOwner) {
+      return res.status(403).json({ code: 403, message: "Bạn không có quyền xác nhận đơn hàng này!" });
+    }
 
+    const normalizedCurrent = normalizeStatus(order.status);
+    if (
+      normalizedCurrent !== "Đã giao hàng" &&
+      normalizedCurrent !== "Đang giao hàng" &&
+      !(normalizedCurrent === "Đã hoàn thành" && !order.isCustomerConfirmed)
+    ) {
+      return res.status(400).json({
+        code: 400,
+        message: "Không thể xác nhận nhận hàng cho đơn hàng ở trạng thái này!",
+      });
+    }
+
+    order.status = "Đã hoàn thành";
+    order.isCustomerConfirmed = true;
+    order.completedAt = new Date();
+    await order.save();
+
+    res.status(200).json({
+      code: 200,
+      message: "Đã xác nhận nhận hàng thành công",
+      data: mapOrderForResponse(order),
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
+// POST dispute/report order
+router.post("/dispute-order", authenticateToken, async (req, res) => {
+  try {
+    const { orderId, reason } = req.body;
+    if (!orderId || !reason) {
+      return res.status(400).json({ code: 400, message: "Thiếu mã đơn hàng hoặc lý do khiếu nại" });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy đơn hàng" });
+    }
+
+    const isOwner = order.user && order.user.toString() === req.user.id.toString();
+    if (!isOwner) {
+      return res.status(403).json({ code: 403, message: "Bạn không có quyền khiếu nại đơn hàng này!" });
+    }
+
+    const normalizedCurrent = normalizeStatus(order.status);
+    if (
+      normalizedCurrent !== "Đã giao hàng" &&
+      normalizedCurrent !== "Đang giao hàng" &&
+      !(normalizedCurrent === "Đã hoàn thành" && !order.isCustomerConfirmed)
+    ) {
+      return res.status(400).json({
+        code: 400,
+        message: "Không thể khiếu nại đơn hàng ở trạng thái này!",
+      });
+    }
+
+    order.status = "Khiếu nại";
+    order.disputeReason = reason;
+    order.disputedAt = new Date();
+    await order.save();
+
+    res.status(200).json({
+      code: 200,
+      message: "Đã gửi khiếu nại đơn hàng thành công",
+      data: mapOrderForResponse(order),
+    });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
 
 // POST clear all items in cart
 router.post("/clear-cart", authenticateToken, async (req, res) => {

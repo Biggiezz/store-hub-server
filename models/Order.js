@@ -124,6 +124,11 @@ const orderSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Trạng thái khách hàng đã xác nhận nhận hàng hay chưa
+    isCustomerConfirmed: {
+      type: Boolean,
+      default: false,
+    },
     // Thời điểm đơn hàng được xác nhận
     confirmedAt: {
       type: Date,
@@ -136,8 +141,21 @@ const orderSchema = new mongoose.Schema(
     deliveringAt: {
       type: Date,
     },
+    // Thời điểm đơn hàng giao đến địa chỉ khách hàng
+    deliveredAt: {
+      type: Date,
+    },
     // Thời điểm đơn hàng giao thành công/hoàn thành
     completedAt: {
+      type: Date,
+    },
+    // Lý do khiếu nại (nếu có)
+    disputeReason: {
+      type: String,
+      default: "",
+    },
+    // Thời điểm đơn hàng bị khiếu nại
+    disputedAt: {
       type: Date,
     },
   },
