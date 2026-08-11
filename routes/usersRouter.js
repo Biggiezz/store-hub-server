@@ -9,6 +9,16 @@ const ActivityLog = require("../models/ActivityLog");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const mongoose = require("mongoose");
+const { OAuth2Client } = require("google-auth-library");
+
+const googleClient = new OAuth2Client();
+
+function toSafeUser(user) {
+  const safeUser = user.toObject ? user.toObject() : { ...user };
+  delete safeUser.password;
+  delete safeUser.googleSub;
+  return safeUser;
+}
 
 const ADMIN_ROLES = ["admin", "superadmin", "quản lý cửa hàng", "quản trị viên tối cao", "quản trị viên"];
 
@@ -106,8 +116,8 @@ router.post("/login", async (req, res) => {
     }
 
     // Tìm kiếm người dùng theo email
-    const user = await User.findOne({ email });
-    if (!user) {
+    const user = await User.findOne({ email }).select("+password");
+    if (!user || !user.password) {
       return res.status(400).json({
         code: 400,
         message: "Email hoặc mật khẩu không chính xác."
@@ -157,6 +167,97 @@ router.post("/login", async (req, res) => {
       message: "Lỗi máy chủ khi đăng nhập.",
       error: error.message
     });
+  }
+});
+
+router.post("/google-login", async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    const googleWebClientId = process.env.GOOGLE_WEB_CLIENT_ID;
+
+    if (!idToken) {
+      return res.status(400).json({ code: 400, message: "Thiếu Google ID token." });
+    }
+    if (!googleWebClientId) {
+      return res.status(503).json({ code: 503, message: "Máy chủ chưa cấu hình đăng nhập Google." });
+    }
+
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: googleWebClientId,
+    });
+    const payload = ticket.getPayload();
+
+    if (!payload || !payload.sub || !payload.email || payload.email_verified !== true) {
+      return res.status(401).json({ code: 401, message: "Tài khoản Google không hợp lệ hoặc email chưa được xác minh." });
+    }
+
+    const normalizedEmail = payload.email.trim().toLowerCase();
+    let user = await User.findOne({ googleSub: payload.sub });
+
+    if (!user) {
+      user = await User.findOne({ email: normalizedEmail }).select("+password +googleSub");
+      if (user) {
+        if (String(user.role || "").toLowerCase() !== "customer") {
+          return res.status(403).json({
+            code: 403,
+            message: "Tài khoản quản trị phải đăng nhập bằng mật khẩu.",
+          });
+        }
+        if (user.googleSub && user.googleSub !== payload.sub) {
+          return res.status(409).json({ code: 409, message: "Email này đã được liên kết với một tài khoản Google khác." });
+        }
+        user.googleSub = payload.sub;
+        user.authProvider = user.password ? "both" : "google";
+      } else {
+        user = new User({
+          name: payload.name || normalizedEmail.split("@")[0],
+          email: normalizedEmail,
+          phone: "",
+          password: null,
+          role: "customer",
+          image: payload.picture || "",
+          address: "",
+          googleSub: payload.sub,
+          authProvider: "google",
+          emailVerified: true,
+        });
+      }
+    }
+
+    if (String(user.role || "").toLowerCase() !== "customer") {
+      return res.status(403).json({ code: 403, message: "Tài khoản quản trị phải đăng nhập bằng mật khẩu." });
+    }
+
+    user.role = "customer";
+    user.emailVerified = true;
+    user.lastActive = new Date();
+    user.isOnline = true;
+    if (!user.name && payload.name) user.name = payload.name;
+    if (!user.image && payload.picture) user.image = payload.picture;
+    await user.save();
+
+    const token = jwt.sign(
+      { id: user._id, role: "customer" },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    try {
+      await recordLoginActivity(user);
+    } catch (logError) {
+      console.error("Không thể ghi log đăng nhập Google:", logError);
+    }
+
+    return res.status(200).json({
+      code: 200,
+      message: "Đăng nhập Google thành công",
+      token,
+      data: toSafeUser(user),
+    });
+  } catch (error) {
+    console.error("Google login error:", error);
+    return res.status(401).json({ code: 401, message: "Không thể xác minh tài khoản Google." });
   }
 });
 
@@ -334,7 +435,7 @@ router.put("/change-password", authenticateToken, async (req, res) => {
       });
     }
 
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.id).select("+password");
     if (!user) {
       return res.status(404).json({
         code: 404,
@@ -343,6 +444,10 @@ router.put("/change-password", authenticateToken, async (req, res) => {
     }
 
     // Kiểm tra mật khẩu cũ
+    if (!user.password) {
+      return res.status(400).json({ code: 400, message: "Tài khoản Google chưa thiết lập mật khẩu." });
+    }
+
     const isMatch = await bcrypt.compare(oldPassword, user.password);
     if (!isMatch) {
       return res.status(400).json({
@@ -614,6 +719,7 @@ router.get("/get-all-users", authenticateToken, authorizeRoles(...ADMIN_ROLES), 
     }
 
     const users = await User.find(query)
+      .select("-password -googleSub")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -1079,12 +1185,16 @@ router.post("/delete-me", authenticateToken, async (req, res) => {
     }
 
     const userId = req.user.id;
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).select("+password");
     if (!user) {
       return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng" });
     }
 
     // Kiểm tra mật khẩu
+    if (!user.password) {
+      return res.status(400).json({ code: 400, message: "Tài khoản Google chưa thiết lập mật khẩu." });
+    }
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       return res.status(400).json({ code: 400, message: "Mật khẩu không chính xác." });

@@ -16,12 +16,28 @@ const UserSchema = new mongoose.Schema(
         // Số điện thoại liên hệ
         phone: {
             type: String,
-            required: true,
+            default: "",
         },
         // Mật khẩu tài khoản (đã mã hóa)
         password: {
             type: String,
-            required: true,
+            default: null,
+            select: false,
+        },
+        googleSub: {
+            type: String,
+            unique: true,
+            sparse: true,
+            select: false,
+        },
+        authProvider: {
+            type: String,
+            enum: ["local", "google", "both"],
+            default: "local",
+        },
+        emailVerified: {
+            type: Boolean,
+            default: false,
         },
         // Vai trò phân quyền: customer (khách hàng), admin (quản lý), superadmin (quản trị tối cao)
         role: {

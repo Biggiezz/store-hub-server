@@ -259,6 +259,15 @@ function getAppTransId() {
 // POST create ZaloPay transaction token securely
 router.post("/create-zalopay-order", authenticateToken, async (req, res) => {
   try {
+    const userDoc = await User.findById(req.user.id).select("phone address");
+    if (!userDoc || !String(userDoc.phone || "").trim() || !String(userDoc.address || "").trim()) {
+      return res.status(400).json({
+        code: 400,
+        errorCode: "PROFILE_INCOMPLETE",
+        message: "Vui lòng cập nhật số điện thoại và địa chỉ giao hàng trước khi thanh toán.",
+      });
+    }
+
     const { amount } = req.body;
     if (!amount) {
       return res.status(400).json({ code: 400, message: "Thiếu số tiền cần thanh toán" });
@@ -337,6 +346,15 @@ router.post("/create-zalopay-order", authenticateToken, async (req, res) => {
 router.post("/create-order", authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
+    const userDoc = await User.findById(userId).select("name phone address");
+    if (!userDoc || !String(userDoc.phone || "").trim() || !String(userDoc.address || "").trim()) {
+      return res.status(400).json({
+        code: 400,
+        errorCode: "PROFILE_INCOMPLETE",
+        message: "Vui lòng cập nhật số điện thoại và địa chỉ giao hàng trước khi đặt hàng.",
+      });
+    }
+
     const paymentMethod = (req.query.paymentMethod || req.body.paymentMethod) === "ZaloPay"
       ? "ZaloPay"
       : "COD";
@@ -379,8 +397,6 @@ router.post("/create-order", authenticateToken, async (req, res) => {
     }
 
     const orderCode = `#SH-${Date.now().toString().slice(-6)}`;
-    const userDoc = userId ? await User.findById(userId) : null;
-
     let discountAmount = 0;
     let zpTransIdVal = "";
     if (paymentMethod === "ZaloPay") {
