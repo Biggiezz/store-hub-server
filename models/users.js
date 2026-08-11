@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const UserSchema = new mongoose.Schema(
     {
-        // Họ và tên người dùng
+        // Họ và tên người
         name: {
             type: String,
             required: true,
