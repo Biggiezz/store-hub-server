@@ -9,14 +9,12 @@ const ActivityLog = require("../models/ActivityLog");
 const Order = require("../models/Order");
 const Product = require("../models/Product");
 const mongoose = require("mongoose");
-const { OAuth2Client } = require("google-auth-library");
-
-const googleClient = new OAuth2Client();
+const { getFirebaseAuth } = require("../config/firebaseAdmin");
 
 function toSafeUser(user) {
   const safeUser = user.toObject ? user.toObject() : { ...user };
   delete safeUser.password;
-  delete safeUser.googleSub;
+  delete safeUser.firebaseUid;
   return safeUser;
 }
 
@@ -173,30 +171,22 @@ router.post("/login", async (req, res) => {
 router.post("/google-login", async (req, res) => {
   try {
     const { idToken } = req.body;
-    const googleWebClientId = process.env.GOOGLE_WEB_CLIENT_ID;
 
     if (!idToken) {
-      return res.status(400).json({ code: 400, message: "Thiếu Google ID token." });
-    }
-    if (!googleWebClientId) {
-      return res.status(503).json({ code: 503, message: "Máy chủ chưa cấu hình đăng nhập Google." });
+      return res.status(400).json({ code: 400, message: "Thiếu Firebase ID token." });
     }
 
-    const ticket = await googleClient.verifyIdToken({
-      idToken,
-      audience: googleWebClientId,
-    });
-    const payload = ticket.getPayload();
+    const payload = await getFirebaseAuth().verifyIdToken(idToken);
 
-    if (!payload || !payload.sub || !payload.email || payload.email_verified !== true) {
+    if (!payload || !payload.uid || !payload.email || payload.email_verified !== true) {
       return res.status(401).json({ code: 401, message: "Tài khoản Google không hợp lệ hoặc email chưa được xác minh." });
     }
 
     const normalizedEmail = payload.email.trim().toLowerCase();
-    let user = await User.findOne({ googleSub: payload.sub });
+    let user = await User.findOne({ firebaseUid: payload.uid });
 
     if (!user) {
-      user = await User.findOne({ email: normalizedEmail }).select("+password +googleSub");
+      user = await User.findOne({ email: normalizedEmail }).select("+password +firebaseUid");
       if (user) {
         if (String(user.role || "").toLowerCase() !== "customer") {
           return res.status(403).json({
@@ -204,10 +194,10 @@ router.post("/google-login", async (req, res) => {
             message: "Tài khoản quản trị phải đăng nhập bằng mật khẩu.",
           });
         }
-        if (user.googleSub && user.googleSub !== payload.sub) {
+        if (user.firebaseUid && user.firebaseUid !== payload.uid) {
           return res.status(409).json({ code: 409, message: "Email này đã được liên kết với một tài khoản Google khác." });
         }
-        user.googleSub = payload.sub;
+        user.firebaseUid = payload.uid;
         user.authProvider = user.password ? "both" : "google";
       } else {
         user = new User({
@@ -218,7 +208,7 @@ router.post("/google-login", async (req, res) => {
           role: "customer",
           image: payload.picture || "",
           address: "",
-          googleSub: payload.sub,
+          firebaseUid: payload.uid,
           authProvider: "google",
           emailVerified: true,
         });
@@ -256,7 +246,10 @@ router.post("/google-login", async (req, res) => {
       data: toSafeUser(user),
     });
   } catch (error) {
-    console.error("Google login error:", error);
+    console.error("Firebase Google login error:", error);
+    if (error.code === "firebase/config-missing") {
+      return res.status(503).json({ code: 503, message: "Máy chủ chưa cấu hình Firebase Admin." });
+    }
     return res.status(401).json({ code: 401, message: "Không thể xác minh tài khoản Google." });
   }
 });
@@ -719,7 +712,7 @@ router.get("/get-all-users", authenticateToken, authorizeRoles(...ADMIN_ROLES), 
     }
 
     const users = await User.find(query)
-      .select("-password -googleSub")
+      .select("-password -firebaseUid")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
