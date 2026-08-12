@@ -22,13 +22,17 @@ function toSafeUser(user) {
 
 const ADMIN_ROLES = ["admin", "superadmin", "quản lý cửa hàng", "quản trị viên tối cao", "quản trị viên"];
 
+const emailRegex = /^[a-zA-Z0-9_%+-]+(?:\.[a-zA-Z0-9_%+-]+)*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+const phoneRegex = /^[0-9]{10}$/;
+const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d).{8,}$/;
+
 // Đăng ký người dùng mới (Mặc định luôn là customer)
 router.post("/register", async (req, res) => {
   try {
     const { name, email, phone, password } = req.body;
 
     // Kiểm tra thông tin đầu vào
-    if (!name || !email || !phone || !password) {
+    if (!name?.trim() || !email || !phone || !password) {
       return res.status(400).json({
         code: 400,
         message:
@@ -36,7 +40,6 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    const emailRegex = /^[a-zA-Z0-9_%+-]+(?:\.[a-zA-Z0-9_%+-]+)*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
         code: 400,
@@ -44,11 +47,10 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    const phoneRegex = /^[0-9]{10,11}$/;
     if (!phoneRegex.test(phone)) {
       return res.status(400).json({
         code: 400,
-        message: "Số điện thoại phải từ 10-11 chữ số.",
+        message: "Số điện thoại phải đúng 10 chữ số.",
       });
     }
 
@@ -267,10 +269,25 @@ router.post("/create-admin", authenticateToken, authorizeRoles("superadmin"), as
     const { name, email, phone, password } = req.body;
 
     // Kiểm tra thông tin đầu vào
-    if (!name || !email || !phone || !password) {
+    if (!name?.trim() || !email || !phone || !password) {
       return res.status(400).json({
         code: 400,
         message: "Vui lòng nhập đầy đủ các thông tin: name, email, phone, password."
+      });
+    }
+
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ code: 400, message: "Email không hợp lệ." });
+    }
+
+    if (!phoneRegex.test(phone)) {
+      return res.status(400).json({ code: 400, message: "Số điện thoại phải đúng 10 chữ số." });
+    }
+
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({
+        code: 400,
+        message: "Mật khẩu tối thiểu phải từ 8 ký tự trở lên, bao gồm cả chữ cái và số.",
       });
     }
 
@@ -384,9 +401,14 @@ router.put("/update-profile", authenticateToken, (req, res) => {
     try {
       const { name, phone, address } = req.body;
       const updates = {};
-      if (name !== undefined) updates.name = name;
-      if (phone !== undefined) updates.phone = phone;
-      if (address !== undefined) updates.address = address;
+      if (name !== undefined) updates.name = name.trim();
+      if (phone !== undefined) {
+        if (!phoneRegex.test(phone)) {
+          return res.status(400).json({ code: 400, message: "Số điện thoại phải đúng 10 chữ số." });
+        }
+        updates.phone = phone;
+      }
+      if (address !== undefined) updates.address = address.trim();
 
       // Nếu có file ảnh được upload, lưu URL Cloudinary
       if (req.file) {
@@ -432,6 +454,13 @@ router.put("/change-password", authenticateToken, async (req, res) => {
       return res.status(400).json({
         code: 400,
         message: "Vui lòng nhập mật khẩu cũ và mật khẩu mới.",
+      });
+    }
+
+    if (!passwordRegex.test(newPassword)) {
+      return res.status(400).json({
+        code: 400,
+        message: "Mật khẩu mới phải tối thiểu 8 ký tự, bao gồm cả chữ cái và số.",
       });
     }
 
@@ -746,6 +775,26 @@ router.post("/add-user", authenticateToken, authorizeRoles("admin", "superadmin"
         code: 400,
         message: "Thiếu thông tin bắt buộc (họ tên, email, SĐT, mật khẩu).",
       });
+    }
+
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ code: 400, message: "Email không hợp lệ." });
+    }
+
+    if (!phoneRegex.test(phone)) {
+      return res.status(400).json({ code: 400, message: "Số điện thoại phải đúng 10 chữ số." });
+    }
+
+    if (!passwordRegex.test(password)) {
+      return res.status(400).json({
+        code: 400,
+        message: "Mật khẩu tối thiểu phải từ 8 ký tự trở lên, bao gồm cả chữ cái và số.",
+      });
+    }
+
+    const ALL_VALID_ROLES = [...ADMIN_ROLES, "customer", "khách hàng"];
+    if (role && !ALL_VALID_ROLES.includes(role.trim().toLowerCase())) {
+      return res.status(400).json({ code: 400, message: "Vai trò người dùng không hợp lệ." });
     }
 
     const existingUser = await User.findOne({ email });
@@ -1096,6 +1145,30 @@ router.put(
         return res
           .status(404)
           .json({ code: 404, message: "Không tìm thấy người dùng." });
+      }
+
+      if (email !== undefined && !emailRegex.test(email)) {
+        return res.status(400).json({ code: 400, message: "Email không hợp lệ." });
+      }
+
+      if (phone !== undefined && !phoneRegex.test(phone)) {
+        return res.status(400).json({ code: 400, message: "Số điện thoại phải đúng 10 chữ số." });
+      }
+
+      if (password && password.trim() !== "") {
+        if (!passwordRegex.test(password)) {
+          return res.status(400).json({
+            code: 400,
+            message: "Mật khẩu tối thiểu phải từ 8 ký tự trở lên, bao gồm cả chữ cái và số.",
+          });
+        }
+      }
+
+      if (role !== undefined) {
+        const ALL_VALID_ROLES = [...ADMIN_ROLES, "customer", "khách hàng"];
+        if (!ALL_VALID_ROLES.includes(role.trim().toLowerCase())) {
+          return res.status(400).json({ code: 400, message: "Vai trò người dùng không hợp lệ." });
+        }
       }
 
       if (name !== undefined) userToUpdate.name = name;

@@ -203,10 +203,15 @@ router.post("/add-review", (req, res) => {
 
     try {
       const { productId, customerName, customerImage, rating, content, orderId } = req.body;
-      if (!productId || !customerName || rating === undefined || !content) {
+      if (!productId || !customerName?.trim() || rating === undefined || !content?.trim()) {
         return res
           .status(400)
           .json({ code: 400, message: "Thiếu thông tin đánh giá" });
+      }
+
+      const r = parseFloat(rating);
+      if (isNaN(r) || r < 1 || r > 5) {
+        return res.status(400).json({ code: 400, message: "Điểm đánh giá phải từ 1 đến 5 sao" });
       }
 
       const product = await Product.findById(productId);
@@ -233,10 +238,10 @@ router.post("/add-review", (req, res) => {
       const mediaUrls = req.files ? req.files.map(file => file.path) : [];
 
       const newReview = {
-        customerName,
+        customerName: customerName.trim(),
         customerImage: customerImage || "",
         rating: parseFloat(rating),
-        content,
+        content: content.trim(),
         media: mediaUrls,
         createdAt: formattedDate,
       };
@@ -274,10 +279,10 @@ router.post("/add-review", (req, res) => {
 });
 
 // POST reply to a review
-router.post("/reply-review", async (req, res) => {
+router.post("/reply-review", authenticateToken, authorizeRoles(...ADMIN_ROLES), async (req, res) => {
   try {
     const { productId, reviewId, replyContent } = req.body;
-    if (!productId || !reviewId || !replyContent) {
+    if (!productId || !reviewId || !replyContent?.trim()) {
       return res.status(400).json({ code: 400, message: "Thiếu thông tin phản hồi" });
     }
 
@@ -294,7 +299,7 @@ router.post("/reply-review", async (req, res) => {
     const now = new Date();
     const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
 
-    review.replyContent = replyContent;
+    review.replyContent = replyContent.trim();
     review.replyCreatedAt = formattedDate;
 
     await product.save();
@@ -535,6 +540,14 @@ router.put("/update-product/:id", authenticateToken, authorizeRoles(...ADMIN_ROL
         return res.status(400).json({ code: 400, message: "Thiếu thông tin sản phẩm", data: null });
       }
 
+      if (isNaN(Number(price)) || Number(price) <= 0) {
+        return res.status(400).json({ code: 400, message: "Giá bán phải là số hợp lệ lớn hơn 0", data: null });
+      }
+
+      if (stock !== undefined && (isNaN(Number(stock)) || Number(stock) < 0)) {
+        return res.status(400).json({ code: 400, message: "Số lượng tồn kho phải là số hợp lệ không âm", data: null });
+      }
+
       // Phân giải danh mục từ name sang ID nếu client gửi tên danh mục
       let categoryId = category.trim();
       if (!mongoose.Types.ObjectId.isValid(categoryId)) {
@@ -749,10 +762,10 @@ router.post("/checkout", authenticateToken, async (req, res) => {
 });
 
 // POST add a new category (Admin only)
-router.post("/add-category", upload.single("image"), async (req, res) => {
+router.post("/add-category", authenticateToken, authorizeRoles(...ADMIN_ROLES), upload.single("image"), async (req, res) => {
   try {
     const { name } = req.body;
-    if (!name) {
+    if (!name || !name.trim()) {
       return res.status(400).json({ code: 400, message: "Tên danh mục là bắt buộc" });
     }
 
@@ -774,7 +787,7 @@ router.post("/add-category", upload.single("image"), async (req, res) => {
 });
 
 // PUT update category
-router.put("/update-category/:id", upload.single("image"), async (req, res) => {
+router.put("/update-category/:id", authenticateToken, authorizeRoles(...ADMIN_ROLES), upload.single("image"), async (req, res) => {
   try {
     const { name, isActive } = req.body;
     const category = await Category.findById(req.params.id);
