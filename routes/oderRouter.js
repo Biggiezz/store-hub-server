@@ -955,6 +955,11 @@ router.post("/update-status", authenticateToken, authorizeRoles(...ADMIN_ROLES),
       return res.status(400).json({ code: 400, message: "Thiếu mã đơn hàng hoặc trạng thái" });
     }
 
+    const VALID_STATUSES = ["Chờ xác nhận", "Đang chuẩn bị", "Đang giao hàng", "Đã giao hàng", "Đã hoàn thành", "Đã hủy", "Khiếu nại"];
+    if (!VALID_STATUSES.includes(status)) {
+      return res.status(400).json({ code: 400, message: "Trạng thái đơn hàng không hợp lệ" });
+    }
+
     const orderCheck = await Order.findById(orderId);
     if (!orderCheck) {
       return res.status(404).json({ code: 404, message: "Không tìm thấy đơn hàng" });
