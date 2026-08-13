@@ -24,6 +24,12 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 
+// Middleware đảm bảo kết nối DB cho mỗi request trên Serverless Vercel
+app.use(async (req, res, next) => {
+  await database.connectDB();
+  next();
+});
+
 app.use("/", indexRouter);
 app.use("/users", usersRouter);
 app.use("/api/usersRouter", usersRouter);
@@ -31,7 +37,6 @@ app.use("/api/productsRouter", productsRouter);
 app.use("/api/newsRouter", newsRouter);
 app.use("/api/oderRouter", oderRouter);
 
-database.connectDB();
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
