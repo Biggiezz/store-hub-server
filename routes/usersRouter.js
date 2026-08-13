@@ -284,7 +284,7 @@ router.post("/create-admin", authenticateToken, authorizeRoles("superadmin"), as
       });
     }
 
-    // Kiểm tra xem email đã được đăng ký chưa
+    // Kiểm tra email đã được đăng ký chưa
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({
