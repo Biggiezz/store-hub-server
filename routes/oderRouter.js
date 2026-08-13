@@ -522,6 +522,9 @@ router.get(
   async (req, res) => {
     try {
       await autoCompleteExpiredOrders();
+      const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(50, Math.max(1, Number.parseInt(req.query.limit, 10) || 10));
+      const totalOrders = await Order.countDocuments({});
       const orders = await Order.find({})
         .populate("user", "name phone address email")
         .populate({
@@ -532,12 +535,20 @@ router.get(
             select: "name image isActive"
           }
         })
-        .sort({ createdAt: -1 });
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit);
 
       res.status(200).json({
         code: 200,
         message: "Lấy danh sách đơn hàng quản trị thành công",
         data: orders.map(mapOrderForResponse),
+        pagination: {
+          totalProducts: totalOrders,
+          currentPage: page,
+          totalPages: Math.max(1, Math.ceil(totalOrders / limit)),
+          limit,
+        },
       });
     } catch (error) {
       res.status(500).json({ code: 500, message: error.message, data: [] });
