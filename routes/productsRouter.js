@@ -157,6 +157,12 @@ router.get("/get-latest-product", async (req, res) => {
 // GET single product detail by ID
 router.get("/get-product-by-id/:id", async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res
+        .status(400)
+        .json({ code: 400, message: "ID sản phẩm không hợp lệ", data: null });
+    }
+
     const product = await Product.findById(req.params.id).populate("category");
     if (!product) {
       return res
@@ -195,7 +201,7 @@ const uploadReview = multer({
 });
 
 // POST add a product review
-router.post("/add-review", (req, res) => {
+router.post("/add-review", authenticateToken, (req, res) => {
   uploadReview.array("media", 5)(req, res, async (uploadError) => {
     if (uploadError) {
       return res.status(400).json({ code: 400, message: "Lỗi tải tệp: " + uploadError.message });
@@ -274,7 +280,11 @@ router.post("/add-review", (req, res) => {
 });
 
 // POST reply to a review
-router.post("/reply-review", async (req, res) => {
+router.post(
+  "/reply-review",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
   try {
     const { productId, reviewId, replyContent } = req.body;
     if (!productId || !reviewId || !replyContent) {
@@ -307,7 +317,8 @@ router.post("/reply-review", async (req, res) => {
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message });
   }
-});
+  },
+);
 
 // GET all cart items
 router.get("/get-cart", authenticateToken, async (req, res) => {
@@ -749,7 +760,12 @@ router.post("/checkout", authenticateToken, async (req, res) => {
 });
 
 // POST add a new category (Admin only)
-router.post("/add-category", upload.single("image"), async (req, res) => {
+router.post(
+  "/add-category",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  upload.single("image"),
+  async (req, res) => {
   try {
     const { name } = req.body;
     if (!name) {
@@ -771,10 +787,16 @@ router.post("/add-category", upload.single("image"), async (req, res) => {
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message });
   }
-});
+  },
+);
 
 // PUT update category
-router.put("/update-category/:id", upload.single("image"), async (req, res) => {
+router.put(
+  "/update-category/:id",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  upload.single("image"),
+  async (req, res) => {
   try {
     const { name, isActive } = req.body;
     const category = await Category.findById(req.params.id);
@@ -791,7 +813,8 @@ router.put("/update-category/:id", upload.single("image"), async (req, res) => {
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message });
   }
-});
+  },
+);
 
 // DELETE category
 router.delete("/delete-category/:id", authenticateToken, authorizeRoles(...ADMIN_ROLES), async (req, res) => {

@@ -68,6 +68,14 @@ const UserSchema = new mongoose.Schema(
             type: Boolean,
             default: false,
         },
+        resetPasswordOtp: {
+            type: String,
+            default: null,
+        },
+        resetPasswordOtpExpires: {
+            type: Date,
+            default: null,
+        },
     },
     {
         // Tự động lưu thời gian tạo (createdAt) và cập nhật (updatedAt)

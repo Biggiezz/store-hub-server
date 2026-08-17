@@ -634,16 +634,16 @@ router.put(
 
       let isAllowed = false;
       if (normalizedNew === "Đã hủy") {
-        // Chỉ có superadmin mới được phép hủy đơn hàng
         const userRole = (req.user.role || "").trim().toLowerCase();
-        if (userRole !== "superadmin") {
+        // Super Admin có quyền hủy, hoặc Admin có quyền hủy nếu trạng thái hiện tại là Khiếu nại
+        if (userRole !== "superadmin" && !(userRole === "admin" && normalizedCurrent === "Khiếu nại")) {
           return res.status(403).json({
             code: 403,
-            message: "Chỉ có Super Admin mới có quyền hủy đơn hàng!",
+            message: "Bạn không có quyền hủy đơn hàng này!",
             data: null,
           });
         }
-        // Super Admin cũng không được phép hủy khi hàng đã xuất kho, trừ khi đơn hàng đang bị khiếu nại
+        // Chỉ được phép hủy khi Chờ xác nhận, Đã xác nhận hoặc Khiếu nại
         if (normalizedCurrent !== "Chờ xác nhận" && normalizedCurrent !== "Đã xác nhận" && normalizedCurrent !== "Khiếu nại") {
           return res.status(400).json({
             code: 400,
@@ -677,6 +677,22 @@ router.put(
         updateFields.cancelReason = "Đơn hàng bị hủy bởi người bán";
       }
       if (status === "Đã hủy" && orderCheck.status !== "Đã hủy") {
+        // Hoàn trả lại số lượng tồn kho cho các sản phẩm trong đơn
+        if (orderCheck.items && orderCheck.items.length > 0) {
+          for (const item of orderCheck.items) {
+            const prodId = item.product || item.productId;
+            const qty = item.quantity || 1;
+            if (prodId) {
+              await Product.findByIdAndUpdate(prodId, {
+                $inc: {
+                  stock: qty,
+                  soldQuantity: -qty
+                }
+              });
+            }
+          }
+        }
+
         if (orderCheck.paymentMethod === "ZaloPay") {
           let zpTransId = orderCheck.zpTransId;
           if (!zpTransId && orderCheck.appTransId) {
@@ -958,75 +974,6 @@ router.post("/cancel-order", authenticateToken, async (req, res) => {
     res.status(500).json({ code: 500, message: error.message });
   }
 });
-// POST update order status
-router.post("/update-status", authenticateToken, authorizeRoles(...ADMIN_ROLES), async (req, res) => {
-  try {
-    const { orderId, status } = req.body;
-    if (!orderId || !status) {
-      return res.status(400).json({ code: 400, message: "Thiếu mã đơn hàng hoặc trạng thái" });
-    }
-
-    const orderCheck = await Order.findById(orderId);
-    if (!orderCheck) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy đơn hàng" });
-    }
-
-    if (status === "Đã hủy" && orderCheck.status !== "Đã hủy") {
-      if (orderCheck.paymentMethod === "ZaloPay") {
-        let zpTransId = orderCheck.zpTransId;
-        if (!zpTransId && orderCheck.appTransId) {
-          try {
-            const queryResult = await queryZaloPayOrder(orderCheck.appTransId);
-            if (queryResult && queryResult.return_code === 1) {
-              zpTransId = queryResult.zp_trans_id;
-              orderCheck.zpTransId = zpTransId;
-              await orderCheck.save();
-            }
-          } catch (err) {
-            console.error("Lỗi khi tìm zpTransId cho đơn hàng cũ (Admin update-status):", err);
-          }
-        }
-
-        if (zpTransId) {
-          try {
-            const refundRes = await refundZaloPay(
-              zpTransId,
-              orderCheck.totalAmount,
-              "Hoan tien huy don (Admin update-status): Admin huy don"
-            );
-            console.log("ZaloPay refund response (Admin update-status):", refundRes);
-          } catch (refundErr) {
-            console.error("Lỗi khi gọi API hoàn tiền ZaloPay (Admin update-status):", refundErr);
-          }
-        }
-      }
-    }
-
-    const updateFields = { status, ...getStatusTimestamp(status) };
-    if (status === "Đã hoàn thành" && normalizeStatus(orderCheck.status) === "Khiếu nại") {
-      updateFields.isCustomerConfirmed = true;
-    }
-
-    const result = await Order.updateOne(
-      { _id: orderId },
-      { $set: updateFields }
-    );
-
-    if (result.matchedCount === 0) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy đơn hàng" });
-    }
-
-    const updatedOrder = await Order.findById(orderId);
-
-    res.status(200).json({
-      code: 200,
-      message: "Cập nhật trạng thái thành công",
-      data: updatedOrder,
-    });
-  } catch (error) {
-    res.status(500).json({ code: 500, message: error.message });
-  }
-});
 // POST confirm receipt of order
 router.post("/confirm-receipt", authenticateToken, async (req, res) => {
   try {
@@ -1088,6 +1035,13 @@ router.post("/dispute-order", authenticateToken, async (req, res) => {
     const isOwner = order.user && order.user.toString() === req.user.id.toString();
     if (!isOwner) {
       return res.status(403).json({ code: 403, message: "Bạn không có quyền khiếu nại đơn hàng này!" });
+    }
+
+    if (order.disputedAt) {
+      return res.status(400).json({
+        code: 400,
+        message: "Đơn hàng này đã từng bị khiếu nại và không thể khiếu nại lại!",
+      });
     }
 
     const normalizedCurrent = normalizeStatus(order.status);

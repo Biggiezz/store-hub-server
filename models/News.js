@@ -38,6 +38,10 @@ const NewsSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    likes: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     // Tự động thêm trường createdAt (ngày tạo) và updatedAt (ngày cập nhật)

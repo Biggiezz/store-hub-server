@@ -367,4 +367,66 @@ router.delete(
   },
 );
 
+/**
+ * @route   POST /api/newsRouter/like-news/:id
+ * @desc    Tăng hoặc giảm lượt thích bài viết
+ * @access  Public
+ */
+router.post("/like-news/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action } = req.body; // "like" hoặc "unlike"
+    const incValue = action === "like" ? 1 : -1;
+
+    const newsItem = await News.findById(id);
+    if (!newsItem) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy bài viết" });
+    }
+
+    let currentLikes = newsItem.likes || 0;
+    currentLikes = Math.max(0, currentLikes + incValue);
+    newsItem.likes = currentLikes;
+    await newsItem.save();
+
+    return res.status(200).json({
+      code: 200,
+      message: action === "like" ? "Đã thích bài viết" : "Đã bỏ thích bài viết",
+      likes: currentLikes
+    });
+  } catch (error) {
+    return res.status(500).json({
+      code: 500,
+      message: "Lỗi máy chủ khi cập nhật lượt thích",
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   GET /api/newsRouter/share/news/:id
+ * @desc    Hiển thị giao diện web chia sẻ của bài viết tin tức
+ * @access  Public
+ */
+router.get("/share/news/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const newsItem = await News.findById(id);
+    if (!newsItem) {
+      return res.status(404).send("<h1>Không tìm thấy bài viết</h1>");
+    }
+
+    const formattedDate = newsItem.createdAt
+      ? new Date(newsItem.createdAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })
+      : "";
+
+    res.render("news_share", {
+      layout: false, // Bỏ qua layout.hbs mặc định để tự quản lý HTML
+      news: newsItem,
+      formattedDate
+    });
+  } catch (error) {
+    res.status(500).send("<h1>Lỗi máy chủ</h1>");
+  }
+});
+
 module.exports = router;

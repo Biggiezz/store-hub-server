@@ -471,7 +471,11 @@ router.put("/change-password", authenticateToken, async (req, res) => {
 });
 
 // Lấy dữ liệu thống kê tổng quan cho Admin (AdminHomeFragment)
-router.get("/admin/dashboard", async (req, res) => {
+router.get(
+  "/admin/dashboard",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
   try {
 
     const [
@@ -522,10 +526,15 @@ router.get("/admin/dashboard", async (req, res) => {
       message: "Lỗi hệ thống khi lấy dữ liệu thống kê quản trị.",
     });
   }
-});
+  },
+);
 
 // Lấy dữ liệu thống kê doanh thu theo thời gian từ Đơn hàng đã thanh toán
-router.get("/admin/revenue-stats", async (req, res) => {
+router.get(
+  "/admin/revenue-stats",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
   try {
     const period = parseInt(req.query.period) || 0;
     const parsedActivityLimit = parseInt(req.query.activityLimit, 10);
@@ -665,7 +674,8 @@ router.get("/admin/revenue-stats", async (req, res) => {
       message: "Lỗi máy chủ khi lấy dữ liệu thống kê.",
     });
   }
-});
+  },
+);
 
 // Lấy danh sách toàn bộ người dùng (hỗ trợ phân trang, lọc theo type và search)
 router.get("/get-all-users", authenticateToken, authorizeRoles(...ADMIN_ROLES), async (req, res) => {
@@ -781,8 +791,33 @@ router.post("/add-user", authenticateToken, authorizeRoles("admin", "superadmin"
 });
 
 // GET user by ID
-router.get("/get-user-by-id/:id", async (req, res) => {
+router.get("/get-user-by-id/:id", authenticateToken, async (req, res) => {
   try {
+    const requestedUserId = String(req.params.id);
+    const currentUserId = String(req.user?.id || "");
+    const currentRole = String(req.user?.role || "")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+    const normalizedAdminRoles = ADMIN_ROLES.map((role) =>
+      role.replace(/\s+/g, "").toLowerCase(),
+    );
+
+    if (requestedUserId !== currentUserId && !normalizedAdminRoles.includes(currentRole)) {
+      return res.status(403).json({
+        code: 403,
+        message: "Bạn không có quyền xem thông tin tài khoản này.",
+        data: null,
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(requestedUserId)) {
+      return res.status(400).json({
+        code: 400,
+        message: "ID người dùng không hợp lệ.",
+        data: null,
+      });
+    }
+
     const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({
@@ -1196,6 +1231,94 @@ router.post("/delete-me", authenticateToken, async (req, res) => {
     // Tiến hành xóa cứng tài khoản người dùng
     await User.findByIdAndDelete(userId);
     res.status(200).json({ code: 200, message: "Xóa tài khoản thành công" });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
+// Quên mật khẩu - gửi mã OTP
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ code: 400, message: "Vui lòng cung cấp email." });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy tài khoản với email này." });
+    }
+
+    // Tạo mã OTP gồm 6 chữ số
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.resetPasswordOtp = otp;
+    user.resetPasswordOtpExpires = Date.now() + 10 * 60 * 1000; // Hạn 10 phút
+    await user.save();
+
+    console.log(`[FORGOT PASSWORD OTP for ${email}]:`, otp);
+
+    // Gửi email thực tế nếu cấu hình
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      try {
+        const nodemailer = require("nodemailer");
+        const transporter = nodemailer.createTransport({
+          service: "Gmail",
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        });
+
+        await transporter.sendMail({
+          from: `"StoreHub Support" <${process.env.EMAIL_USER}>`,
+          to: email,
+          subject: "Mã OTP khôi phục mật khẩu StoreHub",
+          html: `<p>Xin chào,</p><p>Bạn đã yêu cầu khôi phục mật khẩu cho tài khoản StoreHub.</p><p>Mã OTP của bạn là: <strong>${otp}</strong> (Có hiệu lực trong vòng 10 phút).</p><p>Nếu không yêu cầu thay đổi này, bạn có thể bỏ qua email này.</p>`,
+        });
+      } catch (mailError) {
+        console.error("Lỗi gửi mail thực tế:", mailError);
+      }
+    }
+
+    res.status(200).json({ code: 200, message: "Mã OTP đã được gửi." });
+  } catch (error) {
+    res.status(500).json({ code: 500, message: error.message });
+  }
+});
+
+// Xác thực OTP và đặt lại mật khẩu mới
+router.post("/verify-reset-otp", async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ code: 400, message: "Vui lòng điền đầy đủ các thông tin." });
+    }
+
+    const user = await User.findOne({ email }).select("+password");
+    if (!user) {
+      return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng." });
+    }
+
+    if (!user.resetPasswordOtp || user.resetPasswordOtp !== otp) {
+      return res.status(400).json({ code: 400, message: "Mã OTP không chính xác." });
+    }
+
+    if (user.resetPasswordOtpExpires < Date.now()) {
+      return res.status(400).json({ code: 400, message: "Mã OTP đã hết hạn." });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ code: 400, message: "Mật khẩu mới phải từ 6 ký tự trở lên." });
+    }
+
+    // Hash mật khẩu mới
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    user.resetPasswordOtp = null;
+    user.resetPasswordOtpExpires = null;
+    await user.save();
+
+    res.status(200).json({ code: 200, message: "Đặt lại mật khẩu thành công." });
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message });
   }
