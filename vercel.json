@@ -2,6 +2,14 @@
   "version": 2,
   "rewrites": [
     {
+      "source": "/api-docs",
+      "destination": "/swagger.html"
+    },
+    {
+      "source": "/swagger",
+      "destination": "/swagger.html"
+    },
+    {
       "source": "/(.*)",
       "destination": "/api/index.js"
     }

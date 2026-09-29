@@ -1,0 +1,1435 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StoreHub - API Documentation & Swagger UI</title>
+  <link rel="icon" type="image/png" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/favicon-32x32.png" sizes="32x32" />
+  <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --dark-bg: #0f172a;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: #f8fafc;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #334155;
+    }
+
+    /* Custom Header */
+    .sh-header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+      color: #ffffff;
+      padding: 24px 36px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #3b82f6;
+      box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.4);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    .sh-brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .sh-logo {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #3b82f6, #06b6d4);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 22px;
+      color: white;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+    }
+
+    .sh-title h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .sh-version {
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+      border: 1px solid rgba(96, 165, 250, 0.3);
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .sh-title p {
+      margin: 4px 0 0 0;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+
+    .sh-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .server-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #cbd5e1;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: #10b981;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #10b981;
+    }
+
+    .btn-quick-token {
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-quick-token:hover {
+      background: #1d4ed8;
+      transform: translateY(-1px);
+    }
+
+    /* Container */
+    .swagger-container {
+      max-width: 1400px;
+      margin: 20px auto 60px;
+      padding: 0 24px;
+    }
+
+    /* Hide Swagger default top bar */
+    .swagger-ui .topbar {
+      display: none !important;
+    }
+
+    /* Custom tweaks for modern Swagger UI */
+    .swagger-ui .info {
+      margin: 25px 0 20px 0;
+      background: white;
+      padding: 24px 30px;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .swagger-ui .info .title {
+      font-family: 'Plus Jakarta Sans', sans-serif !important;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .swagger-ui .opblock {
+      border-radius: 8px !important;
+      margin: 0 0 14px 0 !important;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+      border-width: 1px !important;
+      transition: all 0.15s ease-in-out;
+    }
+
+    .swagger-ui .opblock:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.07) !important;
+    }
+
+    .swagger-ui .opblock .opblock-summary {
+      padding: 10px 16px !important;
+    }
+
+    .swagger-ui .opblock .opblock-summary-method {
+      border-radius: 6px !important;
+      font-family: 'JetBrains Mono', monospace !important;
+      font-weight: 700 !important;
+      min-width: 80px;
+      text-align: center;
+    }
+
+    .swagger-ui .opblock .opblock-summary-path {
+      font-family: 'JetBrains Mono', monospace !important;
+      font-size: 14px !important;
+      font-weight: 600 !important;
+      color: #1e293b !important;
+    }
+
+    .swagger-ui .opblock .opblock-summary-description {
+      font-size: 13px !important;
+      color: #475569 !important;
+      font-weight: 500 !important;
+    }
+
+    .swagger-ui .filter .operation-filter-input {
+      border-radius: 8px !important;
+      border: 1px solid #cbd5e1 !important;
+      padding: 10px 14px !important;
+      font-size: 14px !important;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
+    }
+
+    .swagger-ui .btn.authorize {
+      border-radius: 8px !important;
+      color: #10b981 !important;
+      border-color: #10b981 !important;
+      font-weight: 600 !important;
+      padding: 8px 18px !important;
+    }
+
+    .swagger-ui .btn.authorize svg {
+      fill: #10b981 !important;
+    }
+
+    .swagger-ui section.models {
+      border-radius: 12px !important;
+      border: 1px solid #e2e8f0 !important;
+      background: white !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header Navigation -->
+  <header class="sh-header">
+    <div class="sh-brand">
+      <div class="sh-logo">SH</div>
+      <div class="sh-title">
+        <h1>StoreHub RESTful API <span class="sh-version">v1.0.0</span></h1>
+        <p>Hệ thống quản lý bán hàng đa kênh (Android App, Admin Web, Node.js Backend)</p>
+      </div>
+    </div>
+    <div class="sh-actions">
+      <div class="server-badge">
+        <span class="status-dot"></span>
+        <span id="active-server">http://localhost:3000</span>
+      </div>
+      <button class="btn-quick-token" onclick="openTokenPrompt()">
+        🔑 Nhập Token Nhanh
+      </button>
+    </div>
+  </header>
+
+  <!-- Swagger UI Mount Point -->
+  <div class="swagger-container">
+    <div id="swagger-ui"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+
+  <script>
+    // Tự động nhận diện domain đang chạy (Vercel Cloud hoặc Localhost)
+    const currentOrigin = (window.location.protocol.startsWith("http")) 
+      ? window.location.origin 
+      : "https://storehub-server.vercel.app";
+    const isVercel = window.location.hostname.includes("vercel.app") || (!window.location.hostname.includes("localhost") && !window.location.hostname.includes("127.0.0.1") && window.location.protocol.startsWith("http"));
+
+    const serverList = isVercel
+      ? [
+          { url: currentOrigin, description: "☁️ Vercel Cloud Server (Domain hiện tại)" },
+          { url: "http://localhost:3000", description: "💻 Localhost Server (Máy cá nhân)" }
+        ]
+      : [
+          { url: currentOrigin, description: "💻 Local Development Server (Mặc định)" },
+          { url: "https://storehub-server.vercel.app", description: "☁️ Vercel Production Server (Cloud)" }
+        ];
+
+    // Định nghĩa đặc tả OpenAPI 3.0 cho toàn bộ hệ sinh thái StoreHub
+    const storehubSpec = {
+      openapi: "3.0.3",
+      info: {
+        title: "StoreHub API Documentation",
+        version: "1.0.0",
+        description: `
+### 📖 Giới thiệu hệ sinh thái StoreHub
+Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) của hệ thống **StoreHub** (bao gồm Server Node.js/Express kết nối MongoDB Atlas, Cloudinary và ZaloPay).
+
+#### 🛡️ Hướng dẫn xác thực (Authentication):
+- Các API có biểu tượng 🔒 ổ khóa yêu cầu **JWT Bearer Token**.
+- Hãy gọi API \`POST /users/login\` để nhận **token**, sau đó nhấn nút **Authorize** ở góc phải hoặc nút **🔑 Nhập Token Nhanh** ở trên cùng để lưu token một lần cho toàn bộ trang.
+        `
+      },
+      servers: serverList,
+      tags: [
+        {
+          name: "1. Users & Authentication",
+          description: "Quản lý tài khoản, đăng nhập, đăng ký, quên mật khẩu, cập nhật hồ sơ cá nhân"
+        },
+        {
+          name: "2. Admin Dashboard & Users Management",
+          description: "Dành riêng cho Quản trị viên: Thống kê doanh thu, số liệu tổng quan, quản lý danh sách người dùng"
+        },
+        {
+          name: "3. Products & Categories",
+          description: "Quản lý sản phẩm, danh mục hàng hóa, tìm kiếm và đánh giá sản phẩm"
+        },
+        {
+          name: "4. Cart & Checkout",
+          description: "Quản lý giỏ hàng, cập nhật số lượng, báo giá vận chuyển và chuẩn bị đơn hàng"
+        },
+        {
+          name: "5. Orders Management",
+          description: "Đặt hàng COD, thanh toán ZaloPay trực tuyến, theo dõi tiến độ và xử lý đơn hàng"
+        },
+        {
+          name: "6. News & Articles",
+          description: "Tin tức công nghệ, bài viết khuyến mãi và quản lý nội dung bài viết"
+        }
+      ],
+      components: {
+        securitySchemes: {
+          BearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "JWT",
+            description: "Nhập JWT Token nhận được sau khi đăng nhập thành công (Không cần gõ chữ 'Bearer ')"
+          }
+        },
+        schemas: {
+          StandardResponse: {
+            type: "object",
+            properties: {
+              code: { type: "integer", example: 200 },
+              message: { type: "string", example: "Thao tác thành công" },
+              data: { type: "object" }
+            }
+          },
+          ErrorResponse: {
+            type: "object",
+            properties: {
+              code: { type: "integer", example: 400 },
+              message: { type: "string", example: "Thông tin không hợp lệ" },
+              error: { type: "string", example: "Chi tiết thông báo lỗi từ server" }
+            }
+          }
+        }
+      },
+      paths: {
+        /* ========================================================================= */
+        /* 1. USERS & AUTHENTICATION                                                 */
+        /* ========================================================================= */
+        "/users/register": {
+          post: {
+            tags: ["1. Users & Authentication"],
+            summary: "Đăng ký tài khoản khách hàng mới",
+            description: "Tạo tài khoản người dùng mới với vai trò mặc định là 'user' (Khách hàng). Kiểm tra trùng lặp email và số điện thoại.",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["name", "email", "phone", "password"],
+                    properties: {
+                      name: { type: "string", example: "Nguyễn Văn A" },
+                      email: { type: "string", example: "nguyenvana@gmail.com" },
+                      phone: { type: "string", example: "0987654321" },
+                      password: { type: "string", example: "MatKhau123@" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              201: { description: "Đăng ký thành công, trả về thông tin user (đã mã hóa mật khẩu)" },
+              400: { description: "Email đã tồn tại hoặc thiếu trường dữ liệu bắt buộc" }
+            }
+          }
+        },
+
+        "/users/login": {
+          post: {
+            tags: ["1. Users & Authentication"],
+            summary: "Đăng nhập tài khoản & Nhận JWT Token",
+            description: "Kiểm tra thông tin đăng nhập của người dùng hoặc quản trị viên. Trả về JWT Access Token để gọi các API được bảo vệ.",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["email", "password"],
+                    properties: {
+                      email: { type: "string", example: "admin@storehub.com" },
+                      password: { type: "string", example: "Admin@123456" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Đăng nhập thành công, trả về JWT Token và thông tin cơ bản của User" },
+              400: { description: "Sai email hoặc mật khẩu không chính xác" }
+            }
+          }
+        },
+
+        "/users/google-login": {
+          post: {
+            tags: ["1. Users & Authentication"],
+            summary: "Đăng nhập nhanh bằng tài khoản Google",
+            description: "Xác thực IdToken từ Google Identity Service trên Android/Web. Tự động khởi tạo tài khoản nếu là lần đầu đăng nhập.",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["idToken"],
+                    properties: {
+                      idToken: { type: "string", example: "eyJhbGciOiJSUzI1NiIsImtpZCI6..." }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Xác thực Google thành công, trả về JWT Token" },
+              401: { description: "Mã IdToken từ Google không hợp lệ hoặc đã hết hạn" }
+            }
+          }
+        },
+
+        "/users/forgot-password": {
+          post: {
+            tags: ["1. Users & Authentication"],
+            summary: "Yêu cầu cấp lại mật khẩu (Gửi mã OTP qua Email)",
+            description: "Gửi mã OTP gồm 6 chữ số tới hộp thư email của người dùng để thực hiện bước đặt lại mật khẩu.",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["email"],
+                    properties: {
+                      email: { type: "string", example: "user@example.com" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Đã gửi mã xác nhận OTP thành công tới email" },
+              404: { description: "Địa chỉ email không tồn tại trong hệ thống" }
+            }
+          }
+        },
+
+        "/users/verify-reset-otp": {
+          post: {
+            tags: ["1. Users & Authentication"],
+            summary: "Xác thực mã OTP và đặt mật khẩu mới",
+            description: "Kiểm tra mã OTP do người dùng nhập và cập nhật mật khẩu mới nếu mã OTP chính xác và còn hiệu lực.",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["email", "otp", "newPassword"],
+                    properties: {
+                      email: { type: "string", example: "user@example.com" },
+                      otp: { type: "string", example: "123456" },
+                      newPassword: { type: "string", example: "MatKhauMoi999@" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Đổi mật khẩu mới thành công" },
+              400: { description: "Mã OTP không đúng hoặc đã hết hạn" }
+            }
+          }
+        },
+
+        "/users/update-profile": {
+          put: {
+            tags: ["1. Users & Authentication"],
+            summary: "Cập nhật thông tin cá nhân",
+            description: "Người dùng tự cập nhật họ tên, số điện thoại, địa chỉ giao hàng mặc định của mình.",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string", example: "Nguyễn Văn A (Đã cập nhật)" },
+                      phone: { type: "string", example: "0912345678" },
+                      address: { type: "string", example: "Số 123 Đường Cầu Giấy, Hà Nội" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Cập nhật thông tin thành công" },
+              401: { description: "Chưa đăng nhập hoặc Token không hợp lệ" }
+            }
+          }
+        },
+
+        "/users/update-avatar": {
+          put: {
+            tags: ["1. Users & Authentication"],
+            summary: "Cập nhật ảnh đại diện người dùng",
+            description: "Upload ảnh đại diện mới lên đám mây Cloudinary và lưu đường dẫn vào hồ sơ người dùng.",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "multipart/form-data": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      image: { type: "string", format: "binary" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Upload ảnh đại diện thành công" },
+              400: { description: "Không có file ảnh nào được gửi lên" }
+            }
+          }
+        },
+
+        "/users/change-password": {
+          put: {
+            tags: ["1. Users & Authentication"],
+            summary: "Đổi mật khẩu người dùng",
+            description: "Thay đổi mật khẩu khi đã đăng nhập (yêu cầu cung cấp mật khẩu cũ để xác thực).",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["oldPassword", "newPassword"],
+                    properties: {
+                      oldPassword: { type: "string", example: "MatKhauCu123@" },
+                      newPassword: { type: "string", example: "MatKhauMoi456@" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Đổi mật khẩu thành công" },
+              400: { description: "Mật khẩu cũ không chính xác" }
+            }
+          }
+        },
+
+        "/users/logout": {
+          post: {
+            tags: ["1. Users & Authentication"],
+            summary: "Đăng xuất khỏi hệ thống",
+            description: "Đánh dấu trạng thái người dùng là Offline và vô hiệu hóa phiên đăng nhập.",
+            security: [{ BearerAuth: [] }],
+            responses: {
+              200: { description: "Đăng xuất thành công" }
+            }
+          }
+        },
+
+        /* ========================================================================= */
+        /* 2. ADMIN DASHBOARD & USERS MANAGEMENT                                     */
+        /* ========================================================================= */
+        "/users/admin/dashboard": {
+          get: {
+            tags: ["2. Admin Dashboard & Users Management"],
+            summary: "Lấy dữ liệu thống kê tổng quan (Dashboard Admin)",
+            description: "Lấy tổng doanh thu, số sản phẩm bán ra, tổng số thành viên, tổng đơn hàng và đơn hàng chờ xử lý.",
+            security: [{ BearerAuth: [] }],
+            responses: {
+              200: {
+                description: "Thống kê dữ liệu Dashboard",
+                content: {
+                  "application/json": {
+                    example: {
+                      code: 200,
+                      message: "Lấy dữ liệu thống kê quản trị thành công",
+                      data: {
+                        totalSales: 154000000,
+                        totalSalesCount: 84,
+                        totalUsers: 120,
+                        totalProducts: 45,
+                        totalOrders: 60,
+                        pendingOrders: 5
+                      }
+                    }
+                  }
+                }
+              },
+              403: { description: "Không có quyền truy cập (Chỉ dành cho Admin)" }
+            }
+          }
+        },
+
+        "/users/admin/revenue-stats": {
+          get: {
+            tags: ["2. Admin Dashboard & Users Management"],
+            summary: "Lấy dữ liệu biểu đồ doanh thu theo thời gian",
+            description: "Truy vấn doanh thu theo chu kỳ phục vụ hiển thị biểu đồ MPAndroidChart hoặc Chart.js trên Web Admin.",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              {
+                name: "period",
+                in: "query",
+                description: "Chu kỳ: 0 = Tháng này, 1 = Tháng trước, 2 = Năm 2026",
+                schema: { type: "integer", default: 0 }
+              },
+              {
+                name: "activityLimit",
+                in: "query",
+                description: "Số lượng bản ghi nhật ký gần nhất đi kèm",
+                schema: { type: "integer", default: 6 }
+              }
+            ],
+            responses: {
+              200: { description: "Dữ liệu doanh thu và nhãn trục hoành biểu đồ" }
+            }
+          }
+        },
+
+        "/users/admin/recent-activities": {
+          get: {
+            tags: ["2. Admin Dashboard & Users Management"],
+            summary: "Lấy nhật ký hoạt động gần đây của hệ thống",
+            description: "Theo dõi các thao tác quan trọng: Đơn hàng mới, người dùng mới đăng ký, thay đổi giá sản phẩm.",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              {
+                name: "limit",
+                in: "query",
+                description: "Số lượng hoạt động muốn lấy",
+                schema: { type: "integer", default: 10 }
+              }
+            ],
+            responses: {
+              200: { description: "Danh sách nhật ký hoạt động hệ thống" }
+            }
+          }
+        },
+
+        "/users/get-all-users": {
+          get: {
+            tags: ["2. Admin Dashboard & Users Management"],
+            summary: "Lấy danh sách toàn bộ người dùng (Có phân trang & Lọc vai trò)",
+            description: "Admin xem danh sách tài khoản khách hàng, nhân viên và các quản trị viên khác.",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+              { name: "limit", in: "query", schema: { type: "integer", default: 10 } },
+              { name: "role", in: "query", description: "Lọc theo vai trò: user, admin, superadmin", schema: { type: "string" } }
+            ],
+            responses: {
+              200: { description: "Danh sách người dùng kèm phân trang" }
+            }
+          }
+        },
+
+        "/users/add-user": {
+          post: {
+            tags: ["2. Admin Dashboard & Users Management"],
+            summary: "Admin tạo mới tài khoản người dùng hoặc nhân viên",
+            description: "Chỉ Admin/Super Admin mới có quyền khởi tạo tài khoản chỉ định vai trò.",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["name", "email", "phone", "password", "role"],
+                    properties: {
+                      name: { type: "string", example: "Nhân viên Bán hàng" },
+                      email: { type: "string", example: "staff1@storehub.com" },
+                      phone: { type: "string", example: "0977112233" },
+                      password: { type: "string", example: "StaffPass123@" },
+                      role: { type: "string", enum: ["user", "admin"], example: "admin" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              201: { description: "Tạo tài khoản thành công" }
+            }
+          }
+        },
+
+        "/users/update-user/{id}": {
+          put: {
+            tags: ["2. Admin Dashboard & Users Management"],
+            summary: "Admin cập nhật thông tin người dùng theo ID",
+            description: "Cho phép Admin sửa tên, số điện thoại, vai trò hoặc trạng thái khóa/mở tài khoản.",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "id", in: "path", required: true, description: "ID của người dùng cần cập nhật", schema: { type: "string" } }
+            ],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string", example: "Tên đã sửa" },
+                      phone: { type: "string", example: "0911223344" },
+                      role: { type: "string", enum: ["user", "admin", "superadmin"] },
+                      status: { type: "string", enum: ["active", "blocked"] }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Cập nhật thành công" }
+            }
+          }
+        },
+
+        "/users/delete-user/{id}": {
+          delete: {
+            tags: ["2. Admin Dashboard & Users Management"],
+            summary: "Xóa vĩnh viễn tài khoản người dùng khỏi hệ sinh thái",
+            description: "Chỉ Quản trị viên tối cao (Superadmin) mới có quyền thực hiện thao tác này.",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "id", in: "path", required: true, description: "ID người dùng muốn xóa", schema: { type: "string" } }
+            ],
+            responses: {
+              200: { description: "Xóa người dùng thành công" },
+              403: { description: "Từ chối quyền truy cập" }
+            }
+          }
+        },
+
+        /* ========================================================================= */
+        /* 3. PRODUCTS & CATEGORIES                                                  */
+        /* ========================================================================= */
+        "/api/productsRouter/get-all-product": {
+          get: {
+            tags: ["3. Products & Categories"],
+            summary: "Lấy danh sách tất cả sản phẩm (Có phân trang, lọc theo danh mục)",
+            description: "API công khai phục vụ trang chủ khách hàng và danh sách sản phẩm quản trị.",
+            parameters: [
+              { name: "page", in: "query", description: "Số trang hiện tại", schema: { type: "integer", default: 1 } },
+              { name: "limit", in: "query", description: "Số sản phẩm trên 1 trang", schema: { type: "integer", default: 10 } },
+              { name: "categoryId", in: "query", description: "Lọc theo ID danh mục", schema: { type: "string" } }
+            ],
+            responses: {
+              200: { description: "Danh sách sản phẩm kèm metadata phân trang" }
+            }
+          }
+        },
+
+        "/api/productsRouter/get-product-by-id/{id}": {
+          get: {
+            tags: ["3. Products & Categories"],
+            summary: "Lấy chi tiết một sản phẩm theo ID",
+            description: "Bao gồm mô tả chi tiết, hình ảnh, giá bán, tồn kho và danh sách các đánh giá nhận xét.",
+            parameters: [
+              { name: "id", in: "path", required: true, description: "Mã ID sản phẩm", schema: { type: "string" } }
+            ],
+            responses: {
+              200: { description: "Thông tin chi tiết sản phẩm" },
+              404: { description: "Không tìm thấy sản phẩm" }
+            }
+          }
+        },
+
+        "/api/productsRouter/search-product": {
+          get: {
+            tags: ["3. Products & Categories"],
+            summary: "Tìm kiếm sản phẩm theo từ khóa",
+            description: "Tìm kiếm gần đúng theo tên sản phẩm hoặc mô tả.",
+            parameters: [
+              { name: "keyword", in: "query", required: true, description: "Từ khóa cần tìm", schema: { type: "string", example: "iPhone" } }
+            ],
+            responses: {
+              200: { description: "Kết quả tìm kiếm sản phẩm" }
+            }
+          }
+        },
+
+        "/api/productsRouter/get-categories": {
+          get: {
+            tags: ["3. Products & Categories"],
+            summary: "Lấy danh sách danh mục sản phẩm (Categories)",
+            description: "Trả về danh sách các nhóm hàng: Điện thoại, Laptop, Phụ kiện, Đồng hồ...",
+            responses: {
+              200: { description: "Danh sách danh mục sản phẩm" }
+            }
+          }
+        },
+
+        "/api/productsRouter/add-product": {
+          post: {
+            tags: ["3. Products & Categories"],
+            summary: "Admin: Thêm mới sản phẩm (kèm tải ảnh lên Cloudinary)",
+            description: "Tạo sản phẩm mới, upload ảnh trực tiếp lên Cloudinary và lưu vào cơ sở dữ liệu.",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "multipart/form-data": {
+                  schema: {
+                    type: "object",
+                    required: ["name", "price", "category", "countInStock", "image"],
+                    properties: {
+                      name: { type: "string", example: "iPhone 15 Pro Max 256GB" },
+                      price: { type: "number", example: 29990000 },
+                      description: { type: "string", example: "Thiết kế titan cao cấp, chip A17 Pro mạnh mẽ" },
+                      category: { type: "string", example: "66aa11223344556677889900" },
+                      countInStock: { type: "integer", example: 50 },
+                      image: { type: "string", format: "binary" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              201: { description: "Thêm sản phẩm mới thành công" }
+            }
+          }
+        },
+
+        "/api/productsRouter/update-product/{id}": {
+          put: {
+            tags: ["3. Products & Categories"],
+            summary: "Admin: Cập nhật thông tin sản phẩm",
+            description: "Cập nhật tên, giá bán, mô tả, danh mục hoặc hình ảnh thay thế.",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "id", in: "path", required: true, description: "ID sản phẩm cần sửa", schema: { type: "string" } }
+            ],
+            requestBody: {
+              content: {
+                "multipart/form-data": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      name: { type: "string" },
+                      price: { type: "number" },
+                      description: { type: "string" },
+                      countInStock: { type: "integer" },
+                      image: { type: "string", format: "binary" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Cập nhật sản phẩm thành công" }
+            }
+          }
+        },
+
+        "/api/productsRouter/delete-product/{id}": {
+          delete: {
+            tags: ["3. Products & Categories"],
+            summary: "Admin: Xóa sản phẩm khỏi hệ thống",
+            description: "Chỉ Superadmin hoặc Quản trị viên được ủy quyền mới được xóa sản phẩm.",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "id", in: "path", required: true, description: "ID sản phẩm cần xóa", schema: { type: "string" } }
+            ],
+            responses: {
+              200: { description: "Xóa sản phẩm thành công" }
+            }
+          }
+        },
+
+        "/api/productsRouter/add-review": {
+          post: {
+            tags: ["3. Products & Categories"],
+            summary: "Đăng đánh giá & chấm điểm sao cho sản phẩm",
+            description: "Khách hàng gửi nhận xét, số sao đánh giá (1-5 sao) cho sản phẩm.",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["productId", "rating", "comment"],
+                    properties: {
+                      productId: { type: "string", example: "66aa11223344556677889900" },
+                      rating: { type: "number", example: 5 },
+                      comment: { type: "string", example: "Sản phẩm dùng rất mượt, đóng gói cẩn thận!" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              201: { description: "Đánh giá thành công" }
+            }
+          }
+        },
+
+        "/api/productsRouter/add-category": {
+          post: {
+            tags: ["3. Products & Categories"],
+            summary: "Admin: Thêm danh mục sản phẩm mới",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "multipart/form-data": {
+                  schema: {
+                    type: "object",
+                    required: ["name"],
+                    properties: {
+                      name: { type: "string", example: "Tai nghe True Wireless" },
+                      image: { type: "string", format: "binary" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              201: { description: "Thêm danh mục thành công" }
+            }
+          }
+        },
+
+        "/api/productsRouter/delete-category/{id}": {
+          delete: {
+            tags: ["3. Products & Categories"],
+            summary: "Admin: Xóa danh mục sản phẩm",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "id", in: "path", required: true, schema: { type: "string" } }
+            ],
+            responses: {
+              200: { description: "Xóa danh mục thành công" }
+            }
+          }
+        },
+
+        /* ========================================================================= */
+        /* 4. CART & CHECKOUT                                                        */
+        /* ========================================================================= */
+        "/api/productsRouter/get-cart": {
+          get: {
+            tags: ["4. Cart & Checkout"],
+            summary: "Lấy chi tiết giỏ hàng của người dùng",
+            description: "Xem các sản phẩm đang có trong giỏ hàng cùng với tổng số tiền tạm tính.",
+            security: [{ BearerAuth: [] }],
+            responses: {
+              200: { description: "Thông tin giỏ hàng và danh sách sản phẩm" }
+            }
+          }
+        },
+
+        "/api/productsRouter/add-to-cart": {
+          post: {
+            tags: ["4. Cart & Checkout"],
+            summary: "Thêm sản phẩm vào giỏ hàng",
+            description: "Nếu sản phẩm đã có trong giỏ, tự động tăng số lượng lên tương ứng.",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["productId", "quantity"],
+                    properties: {
+                      productId: { type: "string", example: "66aa11223344556677889900" },
+                      quantity: { type: "integer", example: 1 }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Thêm vào giỏ hàng thành công" }
+            }
+          }
+        },
+
+        "/api/productsRouter/update-cart-quantity": {
+          post: {
+            tags: ["4. Cart & Checkout"],
+            summary: "Cập nhật số lượng sản phẩm trong giỏ hàng",
+            description: "Thay đổi trực tiếp số lượng của một món hàng trong giỏ.",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["productId", "quantity"],
+                    properties: {
+                      productId: { type: "string", example: "66aa11223344556677889900" },
+                      quantity: { type: "integer", example: 3 }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Cập nhật số lượng thành công" }
+            }
+          }
+        },
+
+        "/api/productsRouter/delete-cart-item/{id}": {
+          delete: {
+            tags: ["4. Cart & Checkout"],
+            summary: "Xóa một sản phẩm ra khỏi giỏ hàng",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "id", in: "path", required: true, description: "ID của sản phẩm cần xóa", schema: { type: "string" } }
+            ],
+            responses: {
+              200: { description: "Xóa sản phẩm khỏi giỏ hàng thành công" }
+            }
+          }
+        },
+
+        "/api/productsRouter/shipping-quote": {
+          post: {
+            tags: ["4. Cart & Checkout"],
+            summary: "Tính toán phí giao hàng theo địa chỉ",
+            description: "Ước tính phí vận chuyển dựa trên địa chỉ tỉnh/thành phố và khối lượng đơn.",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["address"],
+                    properties: {
+                      address: { type: "string", example: "Hà Nội" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Phí vận chuyển và thời gian dự kiến giao" }
+            }
+          }
+        },
+
+        /* ========================================================================= */
+        /* 5. ORDERS MANAGEMENT                                                      */
+        /* ========================================================================= */
+        "/api/oderRouter/create-order": {
+          post: {
+            tags: ["5. Orders Management"],
+            summary: "Tạo đơn hàng thanh toán khi nhận hàng (COD)",
+            description: "Tạo đơn hàng thông thường, lưu địa chỉ giao hàng và trừ tồn kho các mặt hàng.",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["items", "shippingAddress", "totalPrice"],
+                    properties: {
+                      items: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            product: { type: "string", example: "66aa11223344556677889900" },
+                            quantity: { type: "integer", example: 1 },
+                            price: { type: "number", example: 29990000 }
+                          }
+                        }
+                      },
+                      shippingAddress: { type: "string", example: "Số 45 Lê Duẩn, Hoàn Kiếm, Hà Nội" },
+                      phone: { type: "string", example: "0988776655" },
+                      paymentMethod: { type: "string", example: "COD" },
+                      totalPrice: { type: "number", example: 29990000 }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              201: { description: "Tạo đơn hàng thành công" }
+            }
+          }
+        },
+
+        "/api/oderRouter/create-zalopay-order": {
+          post: {
+            tags: ["5. Orders Management"],
+            summary: "Tạo đơn hàng & Lấy liên kết thanh toán qua cổng ZaloPay",
+            description: "Gửi thông tin giao dịch tới ZaloPay Gateway, nhận về `orderUrl` để chuyển hướng người dùng hoặc `zpTransToken` cho App SDK.",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["items", "shippingAddress", "totalPrice"],
+                    properties: {
+                      items: { type: "array", items: { type: "object" } },
+                      shippingAddress: { type: "string", example: "Số 1 Đại Cồ Việt, Hai Bà Trưng, Hà Nội" },
+                      totalPrice: { type: "number", example: 500000 }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Trả về token và đường link thanh toán ZaloPay Gateway" }
+            }
+          }
+        },
+
+        "/api/oderRouter/get-orders": {
+          get: {
+            tags: ["5. Orders Management"],
+            summary: "Lấy danh sách lịch sử đơn hàng của khách hàng hiện tại",
+            description: "Xem tất cả các đơn hàng đã đặt kèm trạng thái: Chờ xác nhận, Đang giao, Đã giao...",
+            security: [{ BearerAuth: [] }],
+            responses: {
+              200: { description: "Danh sách đơn hàng của người dùng" }
+            }
+          }
+        },
+
+        "/api/oderRouter/order-detail/{id}": {
+          get: {
+            tags: ["5. Orders Management"],
+            summary: "Lấy chi tiết một đơn hàng theo ID",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "id", in: "path", required: true, schema: { type: "string" } }
+            ],
+            responses: {
+              200: { description: "Thông tin chi tiết đơn hàng" }
+            }
+          }
+        },
+
+        "/api/oderRouter/cancel-order": {
+          post: {
+            tags: ["5. Orders Management"],
+            summary: "Khách hàng hủy đơn hàng (Khi đơn còn ở trạng thái Chờ xác nhận)",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["orderId", "reason"],
+                    properties: {
+                      orderId: { type: "string", example: "66bb11223344556677889900" },
+                      reason: { type: "string", example: "Thay đổi nhu cầu mua hàng" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Hủy đơn hàng thành công, hoàn lại số lượng tồn kho" }
+            }
+          }
+        },
+
+        "/api/oderRouter/confirm-receipt": {
+          post: {
+            tags: ["5. Orders Management"],
+            summary: "Khách hàng xác nhận đã nhận được hàng",
+            description: "Chuyển trạng thái đơn hàng sang 'Đã hoàn thành'.",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["orderId"],
+                    properties: {
+                      orderId: { type: "string", example: "66bb11223344556677889900" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Xác nhận nhận hàng thành công" }
+            }
+          }
+        },
+
+        "/api/oderRouter/admin/orders": {
+          get: {
+            tags: ["5. Orders Management"],
+            summary: "Admin: Lấy danh sách toàn bộ đơn hàng trong hệ thống",
+            description: "Hỗ trợ lọc theo trạng thái, tìm kiếm và phân trang.",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+              { name: "limit", in: "query", schema: { type: "integer", default: 10 } }
+            ],
+            responses: {
+              200: { description: "Danh sách đơn hàng toàn hệ thống" }
+            }
+          }
+        },
+
+        "/api/oderRouter/admin/orders/{id}/status": {
+          put: {
+            tags: ["5. Orders Management"],
+            summary: "Admin: Cập nhật trạng thái đơn hàng",
+            description: "Chuyển trạng thái: 'Chờ xác nhận' -> 'Đang chuẩn bị' -> 'Đang giao hàng' -> 'Đã giao hàng' -> 'Đã hủy'.",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "id", in: "path", required: true, description: "ID đơn hàng", schema: { type: "string" } }
+            ],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["status"],
+                    properties: {
+                      status: {
+                        type: "string",
+                        enum: ["Chờ xác nhận", "Đang chuẩn bị", "Đang giao hàng", "Đã giao hàng", "Đã hoàn thành", "Đã hủy"],
+                        example: "Đang giao hàng"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Cập nhật trạng thái đơn hàng thành công" }
+            }
+          }
+        },
+
+        "/api/oderRouter/orders/{id}/shipping": {
+          put: {
+            tags: ["5. Orders Management"],
+            summary: "Admin: Cập nhật mã vận đơn và đơn vị vận chuyển",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "id", in: "path", required: true, schema: { type: "string" } }
+            ],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      carrier: { type: "string", example: "Giao Hàng Nhanh (GHN)" },
+                      trackingCode: { type: "string", example: "GHN123456789VN" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Cập nhật mã vận đơn thành công" }
+            }
+          }
+        },
+
+        /* ========================================================================= */
+        /* 6. NEWS & ARTICLES                                                        */
+        /* ========================================================================= */
+        "/api/newsRouter/get-all-news": {
+          get: {
+            tags: ["6. News & Articles"],
+            summary: "Lấy danh sách các bài viết tin tức công khai",
+            parameters: [
+              { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+              { name: "limit", in: "query", schema: { type: "integer", default: 10 } }
+            ],
+            responses: {
+              200: { description: "Danh sách bài viết tin tức" }
+            }
+          }
+        },
+
+        "/api/newsRouter/get-news-by-id/{id}": {
+          get: {
+            tags: ["6. News & Articles"],
+            summary: "Lấy chi tiết một bài viết tin tức theo ID",
+            parameters: [
+              { name: "id", in: "path", required: true, schema: { type: "string" } }
+            ],
+            responses: {
+              200: { description: "Chi tiết nội dung bài viết tin tức" }
+            }
+          }
+        },
+
+        "/api/newsRouter/like-news/{id}": {
+          post: {
+            tags: ["6. News & Articles"],
+            summary: "Tăng lượt thích (Like) cho bài viết",
+            parameters: [
+              { name: "id", in: "path", required: true, schema: { type: "string" } }
+            ],
+            responses: {
+              200: { description: "Đã thích bài viết" }
+            }
+          }
+        },
+
+        "/api/newsRouter/admin/get-all-news": {
+          get: {
+            tags: ["6. News & Articles"],
+            summary: "Admin: Lấy toàn bộ bài viết (bao gồm bài ẩn, bài nháp)",
+            security: [{ BearerAuth: [] }],
+            responses: {
+              200: { description: "Danh sách bài viết quản trị" }
+            }
+          }
+        },
+
+        "/api/newsRouter/admin/add-news": {
+          post: {
+            tags: ["6. News & Articles"],
+            summary: "Admin: Tạo mới bài viết tin tức (Kèm ảnh bìa)",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "multipart/form-data": {
+                  schema: {
+                    type: "object",
+                    required: ["title", "content", "image"],
+                    properties: {
+                      title: { type: "string", example: "Ra mắt siêu phẩm StoreHub phiên bản 2.0" },
+                      content: { type: "string", example: "Nội dung bài viết chi tiết..." },
+                      status: { type: "string", enum: ["published", "draft"], example: "published" },
+                      image: { type: "string", format: "binary" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              201: { description: "Tạo bài viết mới thành công" }
+            }
+          }
+        },
+
+        "/api/newsRouter/admin/delete-news/{id}": {
+          delete: {
+            tags: ["6. News & Articles"],
+            summary: "Admin: Xóa bài viết tin tức",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "id", in: "path", required: true, schema: { type: "string" } }
+            ],
+            responses: {
+              200: { description: "Xóa bài viết thành công" }
+            }
+          }
+        }
+      }
+    };
+
+    // Khởi tạo Swagger UI
+    window.onload = function() {
+      const ui = SwaggerUIBundle({
+        spec: storehubSpec,
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        plugins: [
+          SwaggerUIBundle.plugins.DownloadUrl
+        ],
+        layout: "BaseLayout",
+        docExpansion: "list",
+        defaultModelsExpandDepth: 1,
+        defaultModelExpandDepth: 1,
+        filter: true,
+        tryItOutEnabled: true,
+        persistAuthorization: true
+      });
+
+      window.ui = ui;
+      if (document.getElementById("active-server")) {
+        document.getElementById("active-server").textContent = currentOrigin;
+      }
+    };
+
+    // Hàm nhập token nhanh
+    function openTokenPrompt() {
+      const token = prompt("Vui lòng dán JWT Bearer Token của bạn vào đây (sau khi đăng nhập):");
+      if (token && token.trim()) {
+        const cleanToken = token.trim().replace(/^Bearer\s+/i, '');
+        window.ui.preauthorizeApiKey("BearerAuth", cleanToken);
+        alert("✅ Đã lưu Token thành công! Bạn có thể test trực tiếp các API quản trị.");
+      }
+    }
+  </script>
+</body>
+</html>
