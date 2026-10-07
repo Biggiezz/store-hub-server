@@ -716,6 +716,13 @@ router.get("/get-all-users", authenticateToken, authorizeRoles(...ADMIN_ROLES), 
     const search = req.query.search || "";
     const userRole = String(req.user.role || "").trim().toLowerCase();
 
+    // Dọn dẹp cờ isOnline: tự động đặt isOnline = false cho các tài khoản không hoạt động trong 15 phút gần nhất
+    const inactiveThreshold = new Date(Date.now() - 15 * 60 * 1000);
+    await User.updateMany(
+      { isOnline: true, $or: [{ lastActive: { $lt: inactiveThreshold } }, { lastActive: null }] },
+      { $set: { isOnline: false } }
+    ).catch(() => {});
+
     // 1. Tính toán tổng số lượng nhân viên và khách hàng để trả về trong Headers
     const totalStaff = await User.countDocuments({ role: { $in: ADMIN_ROLES } });
     const totalCustomers = await User.countDocuments({ role: { $in: ["customer", "khách hàng"] } });
@@ -730,17 +737,6 @@ router.get("/get-all-users", authenticateToken, authorizeRoles(...ADMIN_ROLES), 
       query.role = { $in: ["customer", "khách hàng"] };
     } else if (type === "staff") {
       query.role = { $in: ADMIN_ROLES };
-    }
-
-    // Nếu là superadmin, ẩn các superadmin khác khỏi danh sách
-    if (userRole === "superadmin" || userRole === "quản trị viên tối cao") {
-      if (query.role) {
-        if (query.role.$in) {
-          query.role.$in = query.role.$in.filter(r => r !== "superadmin" && r !== "quản trị viên tối cao");
-        }
-      } else {
-        query.role = { $nin: ["superadmin", "quản trị viên tối cao"] };
-      }
     }
 
     if (search) {
@@ -798,6 +794,13 @@ router.post("/add-user", authenticateToken, authorizeRoles("admin", "superadmin"
     const ALL_VALID_ROLES = [...ADMIN_ROLES, "customer", "khách hàng"];
     if (role && !ALL_VALID_ROLES.includes(role.trim().toLowerCase())) {
       return res.status(400).json({ code: 400, message: "Vai trò người dùng không hợp lệ." });
+    }
+
+    if (role && (role.trim().toLowerCase() === "superadmin" || role.trim().toLowerCase() === "quản trị viên tối cao")) {
+      return res.status(400).json({
+        code: 400,
+        message: "Hệ thống chỉ có duy nhất 1 Superadmin, không thể tạo thêm.",
+      });
     }
 
     const existingUser = await User.findOne({ email });
@@ -1193,9 +1196,11 @@ router.put(
       }
 
       if (role !== undefined) {
-        const ALL_VALID_ROLES = [...ADMIN_ROLES, "customer", "khách hàng"];
-        if (!ALL_VALID_ROLES.includes(role.trim().toLowerCase())) {
-          return res.status(400).json({ code: 400, message: "Vai trò người dùng không hợp lệ." });
+        if (role.trim().toLowerCase() !== String(userToUpdate.role || '').trim().toLowerCase()) {
+          return res.status(400).json({
+            code: 400,
+            message: "Không được phép thay đổi vai trò của người dùng.",
+          });
         }
       }
 
@@ -1213,7 +1218,6 @@ router.put(
         userToUpdate.email = email;
       }
       if (phone !== undefined) userToUpdate.phone = phone;
-      if (role !== undefined) userToUpdate.role = role;
       if (address !== undefined) userToUpdate.address = address;
       if (image !== undefined) userToUpdate.image = image;
 
