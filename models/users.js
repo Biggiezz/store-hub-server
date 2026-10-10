@@ -76,6 +76,19 @@ const UserSchema = new mongoose.Schema(
             type: Date,
             default: null,
         },
+        // Trạng thái khóa tài khoản (dành cho Super Admin xử lý vi phạm)
+        isBlocked: {
+            type: Boolean,
+            default: false,
+        },
+        blockReason: {
+            type: String,
+            default: "",
+        },
+        blockedAt: {
+            type: Date,
+            default: null,
+        },
     },
     {
         // Tự động lưu thời gian tạo (createdAt) và cập nhật (updatedAt)

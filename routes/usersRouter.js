@@ -133,6 +133,14 @@ router.post("/login", async (req, res) => {
       });
     }
 
+    // Kiểm tra tài khoản có bị khóa không (US34)
+    if (user.isBlocked) {
+      return res.status(403).json({
+        code: 403,
+        message: `Tài khoản của bạn đã bị khóa do vi phạm chính sách: ${user.blockReason || "Vi phạm điều khoản dịch vụ"}. Vui lòng liên hệ CSKH để được hỗ trợ.`
+      });
+    }
+
     // Cập nhật lastActive và isOnline khi đăng nhập thành công
     user.lastActive = new Date();
     user.isOnline = true;
@@ -219,6 +227,14 @@ router.post("/google-login", async (req, res) => {
 
     if (String(user.role || "").toLowerCase() !== "customer") {
       return res.status(403).json({ code: 403, message: "Tài khoản quản trị phải đăng nhập bằng mật khẩu." });
+    }
+
+    // Kiểm tra tài khoản có bị khóa không (US34)
+    if (user.isBlocked) {
+      return res.status(403).json({
+        code: 403,
+        message: `Tài khoản của bạn đã bị khóa do vi phạm chính sách: ${user.blockReason || "Vi phạm điều khoản dịch vụ"}. Vui lòng liên hệ CSKH để được hỗ trợ.`
+      });
     }
 
     user.role = "customer";
@@ -1243,6 +1259,85 @@ router.put(
       });
     }
   },
+);
+
+// US34: Khóa hoặc Mở khóa tài khoản người dùng vi phạm (Chỉ dành cho Super Admin)
+router.put(
+  "/toggle-block/:id",
+  authenticateToken,
+  authorizeRoles("superadmin", "quản trị viên tối cao"),
+  async (req, res) => {
+    try {
+      const targetUserId = req.params.id;
+      const { isBlocked, reason } = req.body;
+
+      if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
+        return res.status(400).json({ code: 400, message: "ID người dùng không hợp lệ" });
+      }
+
+      // Không cho phép tự khóa tài khoản của chính mình
+      if (String(req.user.id) === String(targetUserId)) {
+        return res.status(400).json({ code: 400, message: "Bạn không thể tự khóa tài khoản của chính mình." });
+      }
+
+      const userToUpdate = await User.findById(targetUserId);
+      if (!userToUpdate) {
+        return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng." });
+      }
+
+      // Không cho phép khóa Super Admin khác
+      const targetRoleNormalized = String(userToUpdate.role || "").replace(/\s+/g, "").toLowerCase();
+      if (["superadmin", "quảntrịviêntốicao"].includes(targetRoleNormalized)) {
+        return res.status(403).json({
+          code: 403,
+          message: "Không thể khóa tài khoản của Quản trị viên tối cao khác.",
+        });
+      }
+
+      const shouldBlock = typeof isBlocked === "boolean" ? isBlocked : !userToUpdate.isBlocked;
+      userToUpdate.isBlocked = shouldBlock;
+      userToUpdate.blockReason = shouldBlock ? (reason || "Vi phạm điều khoản dịch vụ") : "";
+      userToUpdate.blockedAt = shouldBlock ? new Date() : null;
+      if (shouldBlock) {
+        userToUpdate.isOnline = false;
+      }
+
+      await userToUpdate.save();
+
+      // Ghi nhật ký ActivityLog
+      try {
+        await ActivityLog.create({
+          userId: req.user.id,
+          action: shouldBlock ? "LOCK_USER" : "UNLOCK_USER",
+          description: `${shouldBlock ? "Khóa" : "Mở khóa"} tài khoản: ${userToUpdate.email} (${userToUpdate.name}). Lý do: ${userToUpdate.blockReason || "N/A"}`,
+          details: {
+            targetUserId: userToUpdate._id,
+            targetEmail: userToUpdate.email,
+            reason: userToUpdate.blockReason,
+          },
+        });
+      } catch (logErr) {
+        console.error("Lỗi ghi log khi khóa/mở khóa tài khoản:", logErr);
+      }
+
+      return res.status(200).json({
+        code: 200,
+        message: shouldBlock
+          ? "Đã khóa tài khoản người dùng thành công."
+          : "Đã mở khóa tài khoản người dùng thành công.",
+        data: {
+          id: userToUpdate._id,
+          name: userToUpdate.name,
+          email: userToUpdate.email,
+          isBlocked: userToUpdate.isBlocked,
+          blockReason: userToUpdate.blockReason,
+          blockedAt: userToUpdate.blockedAt,
+        },
+      });
+    } catch (error) {
+      return res.status(500).json({ code: 500, message: error.message });
+    }
+  }
 );
 
 // Xoá người dùng (Chỉ Super Admin có quyền xóa Admin, không xóa Khách hàng hoặc Super Admin khác)
