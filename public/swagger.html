@@ -626,8 +626,8 @@ Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) 
               {
                 name: "period",
                 in: "query",
-                description: "Chu kỳ: 0 = Tháng này, 1 = Tháng trước, 2 = Năm 2026",
-                schema: { type: "integer", default: 0 }
+                description: "Chu kỳ: 0 = Tháng này, 1 = Tháng trước, 2 = Năm 2026, 7d/3 = 7 ngày gần nhất, 30d/4 = 30 ngày gần nhất, 3m/5 = 3 tháng, 6m/6 = 6 tháng",
+                schema: { type: "string", default: "0" }
               },
               {
                 name: "activityLimit",

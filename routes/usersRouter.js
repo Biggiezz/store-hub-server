@@ -581,7 +581,11 @@ router.get(
   authorizeRoles(...ADMIN_ROLES),
   async (req, res) => {
   try {
-    const period = parseInt(req.query.period) || 0;
+    const rawPeriod =
+      req.query.period !== undefined
+        ? String(req.query.period).trim().toLowerCase()
+        : "0";
+    const period = parseInt(rawPeriod, 10);
     const parsedActivityLimit = parseInt(req.query.activityLimit, 10);
     const activityLimit =
       req.query.activityLimit === undefined ||
@@ -594,20 +598,56 @@ router.get(
     let startDate, endDate;
     let daysLabels = [];
 
-    if (period === 0) {
-      // Tháng này: Lấy từ đầu tháng này đến hết tháng
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-      daysLabels = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
-    } else if (period === 1) {
+    const isSevenDays = rawPeriod === "7d" || rawPeriod === "3" || period === 3;
+    const isThirtyDays = rawPeriod === "30d" || rawPeriod === "4" || period === 4;
+    const isThreeMonths = rawPeriod === "3m" || rawPeriod === "5" || period === 5;
+    const isSixMonths = rawPeriod === "6m" || rawPeriod === "6" || period === 6;
+    const isLastMonth = rawPeriod === "1" || period === 1;
+    const isYear = rawPeriod === "2" || period === 2 || rawPeriod === "year";
+    const isThisMonth = !isSevenDays && !isThirtyDays && !isThreeMonths && !isSixMonths && !isLastMonth && !isYear;
+
+    if (isSevenDays) {
+      // 7 ngày gần nhất (bao gồm hôm nay)
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
+        daysLabels.push(`${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`);
+      }
+    } else if (isThirtyDays) {
+      // 30 ngày gần nhất (bao gồm hôm nay)
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29, 0, 0, 0, 0);
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      for (let i = 0; i < 30; i++) {
+        const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
+        daysLabels.push(`${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`);
+      }
+    } else if (isThreeMonths) {
+      // 3 tháng gần nhất (tính từ đầu 2 tháng trước đến hết tháng hiện tại)
+      startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      for (let i = 0; i < 3; i++) {
+        const d = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
+        daysLabels.push(`Th${d.getMonth() + 1}`);
+      }
+    } else if (isSixMonths) {
+      // 6 tháng gần nhất (tính từ đầu 5 tháng trước đến hết tháng hiện tại)
+      startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1, 0, 0, 0, 0);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      for (let i = 0; i < 6; i++) {
+        const d = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
+        daysLabels.push(`Th${d.getMonth() + 1}`);
+      }
+    } else if (isLastMonth) {
       // Tháng trước
-      startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+      startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+      endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
       daysLabels = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
-    } else {
-      // Năm 2026
-      startDate = new Date(2026, 0, 1);
-      endDate = new Date(2026, 11, 31, 23, 59, 59);
+    } else if (isYear) {
+      // Năm 2026 (hoặc năm hiện tại)
+      const year = now.getFullYear();
+      startDate = new Date(year, 0, 1, 0, 0, 0, 0);
+      endDate = new Date(year, 11, 31, 23, 59, 59, 999);
       daysLabels = [
         "Th1",
         "Th2",
@@ -622,6 +662,11 @@ router.get(
         "Th11",
         "Th12",
       ];
+    } else {
+      // Tháng này: Lấy từ đầu tháng này đến hết tháng
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      daysLabels = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
     }
 
     const orders = await Order.find({
@@ -643,7 +688,15 @@ router.get(
     orders.forEach((order) => {
       const orderDate = new Date(order.createdAt);
       let index = 0;
-      if (period === 0 || period === 1) {
+      if (isSevenDays || isThirtyDays) {
+        const orderDay = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
+        const startDay = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+        index = Math.round((orderDay - startDay) / 86400000);
+      } else if (isThreeMonths || isSixMonths) {
+        index =
+          (orderDate.getFullYear() - startDate.getFullYear()) * 12 +
+          (orderDate.getMonth() - startDate.getMonth());
+      } else if (isThisMonth || isLastMonth) {
         let dayOfWeek = orderDate.getDay();
         index = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
       } else {
