@@ -18,9 +18,16 @@ function toSafeUser(user) {
   return safeUser;
 }
 
-const ADMIN_ROLES = ["admin", "superadmin", "quản lý cửa hàng", "quản trị viên tối cao", "quản trị viên"];
+const ADMIN_ROLES = [
+  "admin",
+  "superadmin",
+  "quản lý cửa hàng",
+  "quản trị viên tối cao",
+  "quản trị viên",
+];
 
-const emailRegex = /^[a-zA-Z0-9_%+-]+(?:\.[a-zA-Z0-9_%+-]+)*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+const emailRegex =
+  /^[a-zA-Z0-9_%+-]+(?:\.[a-zA-Z0-9_%+-]+)*@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 const phoneRegex = /^[0-9]{10}$/;
 const passwordRegex = /^(?=.*[a-zA-Z])(?=.*\d).{8,}$/;
 
@@ -78,7 +85,7 @@ router.post("/register", async (req, res) => {
       email,
       phone,
       password: hashedPassword,
-      role: "customer"
+      role: "customer",
     });
 
     const savedUser = await newUser.save();
@@ -90,14 +97,13 @@ router.post("/register", async (req, res) => {
     res.status(201).json({
       code: 201,
       message: "Đăng ký tài khoản thành công",
-      data: userResponse
+      data: userResponse,
     });
-
   } catch (error) {
     res.status(500).json({
       code: 500,
       message: "Lỗi máy chủ khi đăng ký tài khoản.",
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -111,7 +117,7 @@ router.post("/login", async (req, res) => {
     if (!email || !password) {
       return res.status(400).json({
         code: 400,
-        message: "Vui lòng cung cấp đầy đủ email và password."
+        message: "Vui lòng cung cấp đầy đủ email và password.",
       });
     }
 
@@ -120,7 +126,7 @@ router.post("/login", async (req, res) => {
     if (!user || !user.password) {
       return res.status(400).json({
         code: 400,
-        message: "Email hoặc mật khẩu không chính xác."
+        message: "Email hoặc mật khẩu không chính xác.",
       });
     }
 
@@ -129,7 +135,7 @@ router.post("/login", async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({
         code: 400,
-        message: "Email hoặc mật khẩu không chính xác."
+        message: "Email hoặc mật khẩu không chính xác.",
       });
     }
 
@@ -137,7 +143,7 @@ router.post("/login", async (req, res) => {
     if (user.isBlocked) {
       return res.status(403).json({
         code: 403,
-        message: `Tài khoản của bạn đã bị khóa do vi phạm chính sách: ${user.blockReason || "Vi phạm điều khoản dịch vụ"}. Vui lòng liên hệ CSKH để được hỗ trợ.`
+        message: `Tài khoản của bạn đã bị khóa do vi phạm chính sách: ${user.blockReason || "Vi phạm điều khoản dịch vụ"}. Vui lòng liên hệ CSKH để được hỗ trợ.`,
       });
     }
 
@@ -150,7 +156,7 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
       { id: user._id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" } // Token có giá trị trong 7 ngày
+      { expiresIn: "7d" }, // Token có giá trị trong 7 ngày
     );
 
     // Loại bỏ password trước khi trả về
@@ -173,7 +179,7 @@ router.post("/login", async (req, res) => {
     res.status(500).json({
       code: 500,
       message: "Lỗi máy chủ khi đăng nhập.",
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -183,20 +189,35 @@ router.post("/google-login", async (req, res) => {
     const { idToken } = req.body;
 
     if (!idToken) {
-      return res.status(400).json({ code: 400, message: "Thiếu Firebase ID token." });
+      return res
+        .status(400)
+        .json({ code: 400, message: "Thiếu Firebase ID token." });
     }
 
     const payload = await getFirebaseAuth().verifyIdToken(idToken);
 
-    if (!payload || !payload.uid || !payload.email || payload.email_verified !== true) {
-      return res.status(401).json({ code: 401, message: "Tài khoản Google không hợp lệ hoặc email chưa được xác minh." });
+    if (
+      !payload ||
+      !payload.uid ||
+      !payload.email ||
+      payload.email_verified !== true
+    ) {
+      return res
+        .status(401)
+        .json({
+          code: 401,
+          message:
+            "Tài khoản Google không hợp lệ hoặc email chưa được xác minh.",
+        });
     }
 
     const normalizedEmail = payload.email.trim().toLowerCase();
     let user = await User.findOne({ firebaseUid: payload.uid });
 
     if (!user) {
-      user = await User.findOne({ email: normalizedEmail }).select("+password +firebaseUid");
+      user = await User.findOne({ email: normalizedEmail }).select(
+        "+password +firebaseUid",
+      );
       if (user) {
         if (String(user.role || "").toLowerCase() !== "customer") {
           return res.status(403).json({
@@ -205,7 +226,13 @@ router.post("/google-login", async (req, res) => {
           });
         }
         if (user.firebaseUid && user.firebaseUid !== payload.uid) {
-          return res.status(409).json({ code: 409, message: "Email này đã được liên kết với một tài khoản Google khác." });
+          return res
+            .status(409)
+            .json({
+              code: 409,
+              message:
+                "Email này đã được liên kết với một tài khoản Google khác.",
+            });
         }
         user.firebaseUid = payload.uid;
         user.authProvider = user.password ? "both" : "google";
@@ -226,14 +253,19 @@ router.post("/google-login", async (req, res) => {
     }
 
     if (String(user.role || "").toLowerCase() !== "customer") {
-      return res.status(403).json({ code: 403, message: "Tài khoản quản trị phải đăng nhập bằng mật khẩu." });
+      return res
+        .status(403)
+        .json({
+          code: 403,
+          message: "Tài khoản quản trị phải đăng nhập bằng mật khẩu.",
+        });
     }
 
     // Kiểm tra tài khoản có bị khóa không (US34)
     if (user.isBlocked) {
       return res.status(403).json({
         code: 403,
-        message: `Tài khoản của bạn đã bị khóa do vi phạm chính sách: ${user.blockReason || "Vi phạm điều khoản dịch vụ"}. Vui lòng liên hệ CSKH để được hỗ trợ.`
+        message: `Tài khoản của bạn đã bị khóa do vi phạm chính sách: ${user.blockReason || "Vi phạm điều khoản dịch vụ"}. Vui lòng liên hệ CSKH để được hỗ trợ.`,
       });
     }
 
@@ -248,7 +280,7 @@ router.post("/google-login", async (req, res) => {
     const token = jwt.sign(
       { id: user._id, role: "customer" },
       process.env.JWT_SECRET,
-      { expiresIn: "7d" }
+      { expiresIn: "7d" },
     );
 
     try {
@@ -266,63 +298,77 @@ router.post("/google-login", async (req, res) => {
   } catch (error) {
     console.error("Firebase Google login error:", error);
     if (error.code === "firebase/config-missing") {
-      return res.status(503).json({ code: 503, message: "Máy chủ chưa cấu hình Firebase Admin." });
+      return res
+        .status(503)
+        .json({ code: 503, message: "Máy chủ chưa cấu hình Firebase Admin." });
     }
-    return res.status(401).json({ code: 401, message: "Không thể xác minh tài khoản Google." });
+    return res
+      .status(401)
+      .json({ code: 401, message: "Không thể xác minh tài khoản Google." });
   }
 });
 
 // Tạo tài khoản Admin (Chỉ có Super Admin mới có quyền tạo)
-router.post("/create-admin", authenticateToken, authorizeRoles("superadmin"), async (req, res) => {
-  try {
-    const { name, email, phone, password } = req.body;
+router.post(
+  "/create-admin",
+  authenticateToken,
+  authorizeRoles("superadmin"),
+  async (req, res) => {
+    try {
+      const { name, email, phone, password } = req.body;
 
-    // Kiểm tra thông tin đầu vào
-    if (!name?.trim() || !email || !phone || !password) {
-      return res.status(400).json({
-        code: 400,
-        message: "Vui lòng nhập đầy đủ các thông tin: name, email, phone, password."
+      // Kiểm tra thông tin đầu vào
+      if (!name?.trim() || !email || !phone || !password) {
+        return res.status(400).json({
+          code: 400,
+          message:
+            "Vui lòng nhập đầy đủ các thông tin: name, email, phone, password.",
+        });
+      }
+
+      if (!emailRegex.test(email)) {
+        return res
+          .status(400)
+          .json({ code: 400, message: "Email không hợp lệ." });
+      }
+
+      if (!phoneRegex.test(phone)) {
+        return res
+          .status(400)
+          .json({ code: 400, message: "Số điện thoại phải đúng 10 chữ số." });
+      }
+
+      if (!passwordRegex.test(password)) {
+        return res.status(400).json({
+          code: 400,
+          message:
+            "Mật khẩu tối thiểu phải từ 8 ký tự trở lên, bao gồm cả chữ cái và số.",
+        });
+      }
+
+      // Kiểm tra email đã được đăng ký chưa
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({
+          code: 400,
+          message: "Email đã tồn tại trên hệ thống.",
+        });
+      }
+
+      // Mã hóa mật khẩu
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      // Tạo user mới với quyền "admin"
+      const newAdmin = new User({
+        name,
+        email,
+        phone,
+        password: hashedPassword,
+        role: "admin",
       });
-    }
 
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ code: 400, message: "Email không hợp lệ." });
-    }
-
-    if (!phoneRegex.test(phone)) {
-      return res.status(400).json({ code: 400, message: "Số điện thoại phải đúng 10 chữ số." });
-    }
-
-    if (!passwordRegex.test(password)) {
-      return res.status(400).json({
-        code: 400,
-        message: "Mật khẩu tối thiểu phải từ 8 ký tự trở lên, bao gồm cả chữ cái và số.",
-      });
-    }
-
-    // Kiểm tra email đã được đăng ký chưa
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({
-        code: 400,
-        message: "Email đã tồn tại trên hệ thống."
-      });
-    }
-
-    // Mã hóa mật khẩu
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    // Tạo user mới với quyền "admin"
-    const newAdmin = new User({
-      name,
-      email,
-      phone,
-      password: hashedPassword,
-      role: "admin"
-    });
-
-    const savedAdmin = await newAdmin.save();
+      const savedAdmin = await newAdmin.save();
 
       // Loại bỏ password trước khi trả về
       const adminResponse = savedAdmin.toObject();
@@ -368,7 +414,7 @@ router.put("/update-avatar", authenticateToken, (req, res) => {
       const updatedUser = await User.findByIdAndUpdate(
         req.user.id,
         { image: imageUrl },
-        { returnDocument: 'after' },
+        { returnDocument: "after" },
       );
 
       if (!updatedUser) {
@@ -413,7 +459,9 @@ router.put("/update-profile", authenticateToken, (req, res) => {
       if (name !== undefined) updates.name = name.trim();
       if (phone !== undefined) {
         if (!phoneRegex.test(phone)) {
-          return res.status(400).json({ code: 400, message: "Số điện thoại phải đúng 10 chữ số." });
+          return res
+            .status(400)
+            .json({ code: 400, message: "Số điện thoại phải đúng 10 chữ số." });
         }
         updates.phone = phone;
       }
@@ -425,7 +473,7 @@ router.put("/update-profile", authenticateToken, (req, res) => {
       }
 
       const updatedUser = await User.findByIdAndUpdate(req.user.id, updates, {
-        returnDocument: 'after',
+        returnDocument: "after",
       });
 
       if (!updatedUser) {
@@ -453,7 +501,6 @@ router.put("/update-profile", authenticateToken, (req, res) => {
   });
 });
 
-
 // Đổi mật khẩu (oldPassword, newPassword) - cập nhật changePasswordDate
 router.put("/change-password", authenticateToken, async (req, res) => {
   try {
@@ -469,7 +516,8 @@ router.put("/change-password", authenticateToken, async (req, res) => {
     if (!passwordRegex.test(newPassword)) {
       return res.status(400).json({
         code: 400,
-        message: "Mật khẩu mới phải tối thiểu 8 ký tự, bao gồm cả chữ cái và số.",
+        message:
+          "Mật khẩu mới phải tối thiểu 8 ký tự, bao gồm cả chữ cái và số.",
       });
     }
 
@@ -483,7 +531,12 @@ router.put("/change-password", authenticateToken, async (req, res) => {
 
     // Kiểm tra mật khẩu cũ
     if (!user.password) {
-      return res.status(400).json({ code: 400, message: "Tài khoản Google chưa thiết lập mật khẩu." });
+      return res
+        .status(400)
+        .json({
+          code: 400,
+          message: "Tài khoản Google chưa thiết lập mật khẩu.",
+        });
     }
 
     const isMatch = await bcrypt.compare(oldPassword, user.password);
@@ -521,56 +574,55 @@ router.get(
   authenticateToken,
   authorizeRoles(...ADMIN_ROLES),
   async (req, res) => {
-  try {
+    try {
+      const [
+        totalUsers,
+        totalProducts,
+        completedOrders,
+        totalOrders,
+        pendingOrders,
+      ] = await Promise.all([
+        User.countDocuments(),
+        Product.countDocuments(),
+        Order.find({ status: { $in: ["Đã giao hàng", "Đã hoàn thành"] } }),
+        Order.countDocuments(),
+        Order.countDocuments({ status: "Chờ xác nhận" }),
+      ]);
 
-    const [
-      totalUsers,
-      totalProducts,
-      completedOrders,
-      totalOrders,
-      pendingOrders,
-    ] = await Promise.all([
-      User.countDocuments(),
-      Product.countDocuments(),
-      Order.find({ status: { $in: ["Đã giao hàng", "Đã hoàn thành"] } }),
-      Order.countDocuments(),
-      Order.countDocuments({ status: "Chờ xác nhận" }),
-    ]);
+      let totalSalesCount = 0;
+      let totalSalesAmount = 0;
 
-    let totalSalesCount = 0;
-    let totalSalesAmount = 0;
-
-    for (const order of completedOrders) {
-      totalSalesAmount += order.totalPrice || 0;
-      if (order.items) {
-        for (const item of order.items) {
-          totalSalesCount += item.quantity || 0;
+      for (const order of completedOrders) {
+        totalSalesAmount += order.totalPrice || 0;
+        if (order.items) {
+          for (const item of order.items) {
+            totalSalesCount += item.quantity || 0;
+          }
         }
       }
-    }
 
-    res.status(200).json({
-      code: 200,
-      message: "Lấy dữ liệu thống kê quản trị thành công",
-      data: {
-        totalSales: totalSalesAmount,
-        totalSalesCount: totalSalesCount,
-        salesStatus: "+15% so với tháng trước",
-        totalUsers: totalUsers,
-        usersStatus: `+${totalUsers} thành viên`,
-        totalProducts: totalProducts,
-        productsStatus: "Đang kinh doanh",
-        totalOrders: totalOrders,
-        pendingOrders: pendingOrders,
-      },
-    });
-  } catch (error) {
-    console.error("Lỗi khi lấy dashboard admin:", error);
-    res.status(500).json({
-      code: 500,
-      message: "Lỗi hệ thống khi lấy dữ liệu thống kê quản trị.",
-    });
-  }
+      res.status(200).json({
+        code: 200,
+        message: "Lấy dữ liệu thống kê quản trị thành công",
+        data: {
+          totalSales: totalSalesAmount,
+          totalSalesCount: totalSalesCount,
+          salesStatus: "+15% so với tháng trước",
+          totalUsers: totalUsers,
+          usersStatus: `+${totalUsers} thành viên`,
+          totalProducts: totalProducts,
+          productsStatus: "Đang kinh doanh",
+          totalOrders: totalOrders,
+          pendingOrders: pendingOrders,
+        },
+      });
+    } catch (error) {
+      console.error("Lỗi khi lấy dashboard admin:", error);
+      res.status(500).json({
+        code: 500,
+        message: "Lỗi hệ thống khi lấy dữ liệu thống kê quản trị.",
+      });
+    }
   },
 );
 
@@ -580,336 +632,499 @@ router.get(
   authenticateToken,
   authorizeRoles(...ADMIN_ROLES),
   async (req, res) => {
-  try {
-    const rawPeriod =
-      req.query.period !== undefined
-        ? String(req.query.period).trim().toLowerCase()
-        : "0";
-    const period = parseInt(rawPeriod, 10);
-    const parsedActivityLimit = parseInt(req.query.activityLimit, 10);
-    const activityLimit =
-      req.query.activityLimit === undefined ||
-      Number.isNaN(parsedActivityLimit) ||
-      parsedActivityLimit < 0
-        ? 6
-        : parsedActivityLimit;
+    try {
+      const rawPeriod =
+        req.query.period !== undefined
+          ? String(req.query.period).trim().toLowerCase()
+          : "0";
+      const period = parseInt(rawPeriod, 10);
+      const parsedActivityLimit = parseInt(req.query.activityLimit, 10);
+      const activityLimit =
+        req.query.activityLimit === undefined ||
+        Number.isNaN(parsedActivityLimit) ||
+        parsedActivityLimit < 0
+          ? 6
+          : parsedActivityLimit;
 
-    const now = new Date();
-    let startDate, endDate;
-    let daysLabels = [];
+      const now = new Date();
+      let startDate, endDate;
+      let daysLabels = [];
 
-    const isSevenDays = rawPeriod === "7d" || rawPeriod === "3" || period === 3;
-    const isThirtyDays = rawPeriod === "30d" || rawPeriod === "4" || period === 4;
-    const isThreeMonths = rawPeriod === "3m" || rawPeriod === "5" || period === 5;
-    const isSixMonths = rawPeriod === "6m" || rawPeriod === "6" || period === 6;
-    const isLastMonth = rawPeriod === "1" || period === 1;
-    const isYear = rawPeriod === "2" || period === 2 || rawPeriod === "year";
-    const isThisMonth = !isSevenDays && !isThirtyDays && !isThreeMonths && !isSixMonths && !isLastMonth && !isYear;
+      const isSevenDays =
+        rawPeriod === "7d" || rawPeriod === "3" || period === 3;
+      const isThirtyDays =
+        rawPeriod === "30d" || rawPeriod === "4" || period === 4;
+      const isThreeMonths =
+        rawPeriod === "3m" || rawPeriod === "5" || period === 5;
+      const isSixMonths =
+        rawPeriod === "6m" || rawPeriod === "6" || period === 6;
+      const isLastMonth = rawPeriod === "1" || period === 1;
+      const isYear = rawPeriod === "2" || period === 2 || rawPeriod === "year";
+      const isThisMonth =
+        !isSevenDays &&
+        !isThirtyDays &&
+        !isThreeMonths &&
+        !isSixMonths &&
+        !isLastMonth &&
+        !isYear;
 
-    if (isSevenDays) {
-      // 7 ngày gần nhất (bao gồm hôm nay)
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-      for (let i = 0; i < 7; i++) {
-        const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
-        daysLabels.push(`${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`);
-      }
-    } else if (isThirtyDays) {
-      // 30 ngày gần nhất (bao gồm hôm nay)
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29, 0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-      for (let i = 0; i < 30; i++) {
-        const d = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + i);
-        daysLabels.push(`${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`);
-      }
-    } else if (isThreeMonths) {
-      // 3 tháng gần nhất (tính từ đầu 2 tháng trước đến hết tháng hiện tại)
-      startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1, 0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-      for (let i = 0; i < 3; i++) {
-        const d = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
-        daysLabels.push(`Th${d.getMonth() + 1}`);
-      }
-    } else if (isSixMonths) {
-      // 6 tháng gần nhất (tính từ đầu 5 tháng trước đến hết tháng hiện tại)
-      startDate = new Date(now.getFullYear(), now.getMonth() - 5, 1, 0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-      for (let i = 0; i < 6; i++) {
-        const d = new Date(startDate.getFullYear(), startDate.getMonth() + i, 1);
-        daysLabels.push(`Th${d.getMonth() + 1}`);
-      }
-    } else if (isLastMonth) {
-      // Tháng trước
-      startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-      daysLabels = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
-    } else if (isYear) {
-      // Năm 2026 (hoặc năm hiện tại)
-      const year = now.getFullYear();
-      startDate = new Date(year, 0, 1, 0, 0, 0, 0);
-      endDate = new Date(year, 11, 31, 23, 59, 59, 999);
-      daysLabels = [
-        "Th1",
-        "Th2",
-        "Th3",
-        "Th4",
-        "Th5",
-        "Th6",
-        "Th7",
-        "Th8",
-        "Th9",
-        "Th10",
-        "Th11",
-        "Th12",
-      ];
-    } else {
-      // Tháng này: Lấy từ đầu tháng này đến hết tháng
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-      daysLabels = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
-    }
-
-    const orders = await Order.find({
-      createdAt: { $gte: startDate, $lte: endDate },
-      status: { $nin: ["Đã hủy", "cancelled"] },
-    });
-
-    let totalRevenue = 0;
-    let totalOrders = orders.length;
-
-    orders.forEach((order) => {
-      totalRevenue +=
-        order.totalAmount ?? (order.totalPrice || 0) + (order.shippingFee || 0);
-    });
-
-    const revenueByLabel = new Array(daysLabels.length).fill(0);
-    const salesByProduct = new Map();
-
-    orders.forEach((order) => {
-      const orderDate = new Date(order.createdAt);
-      let index = 0;
-      if (isSevenDays || isThirtyDays) {
-        const orderDay = new Date(orderDate.getFullYear(), orderDate.getMonth(), orderDate.getDate());
-        const startDay = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-        index = Math.round((orderDay - startDay) / 86400000);
-      } else if (isThreeMonths || isSixMonths) {
-        index =
-          (orderDate.getFullYear() - startDate.getFullYear()) * 12 +
-          (orderDate.getMonth() - startDate.getMonth());
-      } else if (isThisMonth || isLastMonth) {
-        let dayOfWeek = orderDate.getDay();
-        index = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      if (isSevenDays) {
+        // 7 ngày gần nhất (bao gồm hôm nay)
+        startDate = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() - 6,
+          0,
+          0,
+          0,
+          0,
+        );
+        endDate = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          23,
+          59,
+          59,
+          999,
+        );
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth(),
+            startDate.getDate() + i,
+          );
+          daysLabels.push(
+            `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`,
+          );
+        }
+      } else if (isThirtyDays) {
+        // 30 ngày gần nhất (bao gồm hôm nay)
+        startDate = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate() - 29,
+          0,
+          0,
+          0,
+          0,
+        );
+        endDate = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate(),
+          23,
+          59,
+          59,
+          999,
+        );
+        for (let i = 0; i < 30; i++) {
+          const d = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth(),
+            startDate.getDate() + i,
+          );
+          daysLabels.push(
+            `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`,
+          );
+        }
+      } else if (isThreeMonths) {
+        // 3 tháng gần nhất (tính từ đầu 2 tháng trước đến hết tháng hiện tại)
+        startDate = new Date(
+          now.getFullYear(),
+          now.getMonth() - 2,
+          1,
+          0,
+          0,
+          0,
+          0,
+        );
+        endDate = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
+        for (let i = 0; i < 3; i++) {
+          const d = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth() + i,
+            1,
+          );
+          daysLabels.push(`Th${d.getMonth() + 1}`);
+        }
+      } else if (isSixMonths) {
+        // 6 tháng gần nhất (tính từ đầu 5 tháng trước đến hết tháng hiện tại)
+        startDate = new Date(
+          now.getFullYear(),
+          now.getMonth() - 5,
+          1,
+          0,
+          0,
+          0,
+          0,
+        );
+        endDate = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
+        for (let i = 0; i < 6; i++) {
+          const d = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth() + i,
+            1,
+          );
+          daysLabels.push(`Th${d.getMonth() + 1}`);
+        }
+      } else if (isLastMonth) {
+        // Tháng trước
+        startDate = new Date(
+          now.getFullYear(),
+          now.getMonth() - 1,
+          1,
+          0,
+          0,
+          0,
+          0,
+        );
+        endDate = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
+        daysLabels = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
+      } else if (isYear) {
+        // Năm 2026 (hoặc năm hiện tại)
+        const year = now.getFullYear();
+        startDate = new Date(year, 0, 1, 0, 0, 0, 0);
+        endDate = new Date(year, 11, 31, 23, 59, 59, 999);
+        daysLabels = [
+          "Th1",
+          "Th2",
+          "Th3",
+          "Th4",
+          "Th5",
+          "Th6",
+          "Th7",
+          "Th8",
+          "Th9",
+          "Th10",
+          "Th11",
+          "Th12",
+        ];
       } else {
-        index = orderDate.getMonth();
+        // Tháng này: Lấy từ đầu tháng này đến hết tháng
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        endDate = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
+        daysLabels = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
       }
 
-      if (index >= 0 && index < revenueByLabel.length) {
-        const orderRevenue =
+      const orders = await Order.find({
+        createdAt: { $gte: startDate, $lte: endDate },
+        status: { $nin: ["Đã hủy", "cancelled"] },
+      });
+
+      let totalRevenue = 0;
+      let totalOrders = orders.length;
+
+      orders.forEach((order) => {
+        totalRevenue +=
           order.totalAmount ??
           (order.totalPrice || 0) + (order.shippingFee || 0);
-        revenueByLabel[index] += orderRevenue / 1000000;
-      }
-
-      order.items.forEach((item) => {
-        const productId = String(item.product || item.productId);
-        const current = salesByProduct.get(productId) || {
-          soldCount: 0,
-          revenue: 0,
-        };
-        current.soldCount += item.quantity || 0;
-        current.revenue += (item.price || 0) * (item.quantity || 0);
-        salesByProduct.set(productId, current);
       });
-    });
 
-    const dailyStats = revenueByLabel.map((rev, idx) => ({
-      index: idx,
-      label: daysLabels[idx] || "",
-      revenue: parseFloat(rev.toFixed(2)),
-    }));
+      const revenueByLabel = new Array(daysLabels.length).fill(0);
+      const salesByProduct = new Map();
 
-    const productIds = [...salesByProduct.keys()].filter((id) =>
-      /^[a-f\d]{24}$/i.test(id),
-    );
-    const products = await Product.find({ _id: { $in: productIds } }).select(
-      "name image",
-    );
-    const productsById = new Map(
-      products.map((product) => [String(product._id), product]),
-    );
-    const topProducts = [...salesByProduct.entries()]
-      .map(([productId, sales]) => {
-        const product = productsById.get(productId);
-        return {
-          productId,
-          name: product?.name || "Sản phẩm đã xóa",
-          image: product?.image || "",
-          soldCount: sales.soldCount,
-          revenue: sales.revenue,
-        };
-      })
-      .sort((a, b) => b.soldCount - a.soldCount)
-      .slice(0, 3);
+      orders.forEach((order) => {
+        const orderDate = new Date(order.createdAt);
+        let index = 0;
+        if (isSevenDays || isThirtyDays) {
+          const orderDay = new Date(
+            orderDate.getFullYear(),
+            orderDate.getMonth(),
+            orderDate.getDate(),
+          );
+          const startDay = new Date(
+            startDate.getFullYear(),
+            startDate.getMonth(),
+            startDate.getDate(),
+          );
+          index = Math.round((orderDay - startDay) / 86400000);
+        } else if (isThreeMonths || isSixMonths) {
+          index =
+            (orderDate.getFullYear() - startDate.getFullYear()) * 12 +
+            (orderDate.getMonth() - startDate.getMonth());
+        } else if (isThisMonth || isLastMonth) {
+          let dayOfWeek = orderDate.getDay();
+          index = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        } else {
+          index = orderDate.getMonth();
+        }
 
-    const recentActivities = await buildRecentActivities(activityLimit);
+        if (index >= 0 && index < revenueByLabel.length) {
+          const orderRevenue =
+            order.totalAmount ??
+            (order.totalPrice || 0) + (order.shippingFee || 0);
+          revenueByLabel[index] += orderRevenue / 1000000;
+        }
 
-    res.status(200).json({
-      code: 200,
-      message: "Lấy dữ liệu thống kê doanh thu thành công",
-      data: {
-        totalRevenue: totalRevenue,
-        totalOrders: totalOrders,
-        dailyStats: dailyStats,
-        labels: daysLabels,
-        topProducts,
-        recentActivities,
-      },
-    });
-  } catch (error) {
-    console.error("Lỗi khi lấy dữ liệu thống kê doanh thu:", error);
-    res.status(500).json({
-      code: 500,
-      message: "Lỗi máy chủ khi lấy dữ liệu thống kê.",
-    });
-  }
+        order.items.forEach((item) => {
+          const productId = String(item.product || item.productId);
+          const current = salesByProduct.get(productId) || {
+            soldCount: 0,
+            revenue: 0,
+          };
+          current.soldCount += item.quantity || 0;
+          current.revenue += (item.price || 0) * (item.quantity || 0);
+          salesByProduct.set(productId, current);
+        });
+      });
+
+      const dailyStats = revenueByLabel.map((rev, idx) => ({
+        index: idx,
+        label: daysLabels[idx] || "",
+        revenue: parseFloat(rev.toFixed(2)),
+      }));
+
+      const productIds = [...salesByProduct.keys()].filter((id) =>
+        /^[a-f\d]{24}$/i.test(id),
+      );
+      const products = await Product.find({ _id: { $in: productIds } }).select(
+        "name image",
+      );
+      const productsById = new Map(
+        products.map((product) => [String(product._id), product]),
+      );
+      const topProducts = [...salesByProduct.entries()]
+        .map(([productId, sales]) => {
+          const product = productsById.get(productId);
+          return {
+            productId,
+            name: product?.name || "Sản phẩm đã xóa",
+            image: product?.image || "",
+            soldCount: sales.soldCount,
+            revenue: sales.revenue,
+          };
+        })
+        .sort((a, b) => b.soldCount - a.soldCount)
+        .slice(0, 3);
+
+      const recentActivities = await buildRecentActivities(activityLimit);
+
+      res.status(200).json({
+        code: 200,
+        message: "Lấy dữ liệu thống kê doanh thu thành công",
+        data: {
+          totalRevenue: totalRevenue,
+          totalOrders: totalOrders,
+          dailyStats: dailyStats,
+          labels: daysLabels,
+          topProducts,
+          recentActivities,
+        },
+      });
+    } catch (error) {
+      console.error("Lỗi khi lấy dữ liệu thống kê doanh thu:", error);
+      res.status(500).json({
+        code: 500,
+        message: "Lỗi máy chủ khi lấy dữ liệu thống kê.",
+      });
+    }
   },
 );
 
 // Lấy danh sách toàn bộ người dùng (hỗ trợ phân trang, lọc theo type và search)
-router.get("/get-all-users", authenticateToken, authorizeRoles(...ADMIN_ROLES), async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
-    const type = req.query.type; // 'customer' hoặc 'staff'
-    const search = req.query.search || "";
-    const userRole = String(req.user.role || "").trim().toLowerCase();
+router.get(
+  "/get-all-users",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+      const type = req.query.type; // 'customer' hoặc 'staff'
+      const search = req.query.search || "";
+      const userRole = String(req.user.role || "")
+        .trim()
+        .toLowerCase();
 
-    // Dọn dẹp cờ isOnline: tự động đặt isOnline = false cho các tài khoản không hoạt động trong 15 phút gần nhất
-    const inactiveThreshold = new Date(Date.now() - 15 * 60 * 1000);
-    await User.updateMany(
-      { isOnline: true, $or: [{ lastActive: { $lt: inactiveThreshold } }, { lastActive: null }] },
-      { $set: { isOnline: false } }
-    ).catch(() => {});
+      // Dọn dẹp cờ isOnline: tự động đặt isOnline = false cho các tài khoản không hoạt động trong 15 phút gần nhất
+      const inactiveThreshold = new Date(Date.now() - 15 * 60 * 1000);
+      await User.updateMany(
+        {
+          isOnline: true,
+          $or: [
+            { lastActive: { $lt: inactiveThreshold } },
+            { lastActive: null },
+          ],
+        },
+        { $set: { isOnline: false } },
+      ).catch(() => {});
 
-    // 1. Tính toán tổng số lượng nhân viên và khách hàng để trả về trong Headers
-    const totalStaff = await User.countDocuments({ role: { $in: ADMIN_ROLES } });
-    const totalCustomers = await User.countDocuments({ role: { $in: ["customer", "khách hàng"] } });
+      // 1. Tính toán tổng số lượng nhân viên và khách hàng để trả về trong Headers
+      const totalStaff = await User.countDocuments({
+        role: { $in: ADMIN_ROLES },
+      });
+      const totalCustomers = await User.countDocuments({
+        role: { $in: ["customer", "khách hàng"] },
+      });
 
-    res.setHeader("X-Total-Staff", String(totalStaff));
-    res.setHeader("X-Total-Customers", String(totalCustomers));
-    res.setHeader("Access-Control-Expose-Headers", "X-Total-Staff, X-Total-Customers");
+      res.setHeader("X-Total-Staff", String(totalStaff));
+      res.setHeader("X-Total-Customers", String(totalCustomers));
+      res.setHeader(
+        "Access-Control-Expose-Headers",
+        "X-Total-Staff, X-Total-Customers",
+      );
 
-    // 2. Xây dựng điều kiện truy vấn
-    let query = {};
-    if (type === "customer") {
-      query.role = { $in: ["customer", "khách hàng"] };
-    } else if (type === "staff") {
-      query.role = { $in: ADMIN_ROLES };
+      // 2. Xây dựng điều kiện truy vấn
+      let query = {};
+      if (type === "customer") {
+        query.role = { $in: ["customer", "khách hàng"] };
+      } else if (type === "staff") {
+        query.role = { $in: ADMIN_ROLES };
+      }
+
+      if (search) {
+        query.$or = [
+          { name: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } },
+        ];
+      }
+
+      const users = await User.find(query)
+        .select("-password -firebaseUid")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit);
+      return res.status(200).json({
+        code: 200,
+        message: "Lấy danh sách người dùng thành công",
+        data: users,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        code: 500,
+        message: "Lỗi máy chủ khi lấy danh sách người dùng.",
+        error: error.message,
+      });
     }
-
-    if (search) {
-      query.$or = [
-        { name: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } }
-      ];
-    }
-
-    const users = await User.find(query)
-      .select("-password -firebaseUid")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-    return res.status(200).json({
-      code: 200,
-      message: "Lấy danh sách người dùng thành công",
-      data: users,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      code: 500,
-      message: "Lỗi máy chủ khi lấy danh sách người dùng.",
-      error: error.message,
-    });
-  }
-});
+  },
+);
 
 // Thêm người dùng mới (dành cho Admin/Super Admin)
-router.post("/add-user", authenticateToken, authorizeRoles("admin", "superadmin"), async (req, res) => {
-  try {
-    const { name, email, phone, role, password, address, image } = req.body;
-    if (!name || !email || !phone || !password) {
-      return res.status(400).json({
-        code: 400,
-        message: "Thiếu thông tin bắt buộc (họ tên, email, SĐT, mật khẩu).",
+router.post(
+  "/add-user",
+  authenticateToken,
+  authorizeRoles("admin", "superadmin"),
+  async (req, res) => {
+    try {
+      const { name, email, phone, role, password, address, image } = req.body;
+      if (!name || !email || !phone || !password) {
+        return res.status(400).json({
+          code: 400,
+          message: "Thiếu thông tin bắt buộc (họ tên, email, SĐT, mật khẩu).",
+        });
+      }
+
+      if (!emailRegex.test(email)) {
+        return res
+          .status(400)
+          .json({ code: 400, message: "Email không hợp lệ." });
+      }
+
+      if (!phoneRegex.test(phone)) {
+        return res
+          .status(400)
+          .json({ code: 400, message: "Số điện thoại phải đúng 10 chữ số." });
+      }
+
+      if (!passwordRegex.test(password)) {
+        return res.status(400).json({
+          code: 400,
+          message:
+            "Mật khẩu tối thiểu phải từ 8 ký tự trở lên, bao gồm cả chữ cái và số.",
+        });
+      }
+
+      const ALL_VALID_ROLES = [...ADMIN_ROLES, "customer", "khách hàng"];
+      if (role && !ALL_VALID_ROLES.includes(role.trim().toLowerCase())) {
+        return res
+          .status(400)
+          .json({ code: 400, message: "Vai trò người dùng không hợp lệ." });
+      }
+
+      if (
+        role &&
+        (role.trim().toLowerCase() === "superadmin" ||
+          role.trim().toLowerCase() === "quản trị viên tối cao")
+      ) {
+        return res.status(400).json({
+          code: 400,
+          message: "Hệ thống chỉ có duy nhất 1 Superadmin, không thể tạo thêm.",
+        });
+      }
+
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return res.status(400).json({
+          code: 400,
+          message: "Email đã tồn tại trên hệ thống.",
+        });
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      const newUser = new User({
+        name,
+        email,
+        phone,
+        role: role || "customer",
+        password: hashedPassword,
+        address: address || "",
+        image: image || "",
+      });
+
+      const savedUser = await newUser.save();
+      const userResponse = savedUser.toObject();
+      delete userResponse.password;
+
+      return res.status(201).json({
+        code: 201,
+        message: "Thêm người dùng thành công",
+        data: userResponse,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        code: 500,
+        message: "Lỗi máy chủ khi thêm người dùng.",
+        error: error.message,
       });
     }
-
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ code: 400, message: "Email không hợp lệ." });
-    }
-
-    if (!phoneRegex.test(phone)) {
-      return res.status(400).json({ code: 400, message: "Số điện thoại phải đúng 10 chữ số." });
-    }
-
-    if (!passwordRegex.test(password)) {
-      return res.status(400).json({
-        code: 400,
-        message: "Mật khẩu tối thiểu phải từ 8 ký tự trở lên, bao gồm cả chữ cái và số.",
-      });
-    }
-
-    const ALL_VALID_ROLES = [...ADMIN_ROLES, "customer", "khách hàng"];
-    if (role && !ALL_VALID_ROLES.includes(role.trim().toLowerCase())) {
-      return res.status(400).json({ code: 400, message: "Vai trò người dùng không hợp lệ." });
-    }
-
-    if (role && (role.trim().toLowerCase() === "superadmin" || role.trim().toLowerCase() === "quản trị viên tối cao")) {
-      return res.status(400).json({
-        code: 400,
-        message: "Hệ thống chỉ có duy nhất 1 Superadmin, không thể tạo thêm.",
-      });
-    }
-
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({
-        code: 400,
-        message: "Email đã tồn tại trên hệ thống.",
-      });
-    }
-
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    const newUser = new User({
-      name,
-      email,
-      phone,
-      role: role || "customer",
-      password: hashedPassword,
-      address: address || "",
-      image: image || "",
-    });
-
-    const savedUser = await newUser.save();
-    const userResponse = savedUser.toObject();
-    delete userResponse.password;
-
-    return res.status(201).json({
-      code: 201,
-      message: "Thêm người dùng thành công",
-      data: userResponse,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      code: 500,
-      message: "Lỗi máy chủ khi thêm người dùng.",
-      error: error.message,
-    });
-  }
-});
+  },
+);
 
 // GET user by ID
 router.get("/get-user-by-id/:id", authenticateToken, async (req, res) => {
@@ -923,7 +1138,10 @@ router.get("/get-user-by-id/:id", authenticateToken, async (req, res) => {
       role.replace(/\s+/g, "").toLowerCase(),
     );
 
-    if (requestedUserId !== currentUserId && !normalizedAdminRoles.includes(currentRole)) {
+    if (
+      requestedUserId !== currentUserId &&
+      !normalizedAdminRoles.includes(currentRole)
+    ) {
       return res.status(403).json({
         code: 403,
         message: "Bạn không có quyền xem thông tin tài khoản này.",
@@ -958,6 +1176,140 @@ router.get("/get-user-by-id/:id", authenticateToken, async (req, res) => {
     res.status(500).json({ code: 500, message: error.message, data: null });
   }
 });
+
+// Lấy chi tiết hồ sơ khách hàng, tổng chi tiêu và lịch sử đơn hàng (US25)
+router.get(
+  "/customer-profile/:id",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const userId = req.params.id;
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res.status(400).json({
+          code: 400,
+          message: "ID người dùng không hợp lệ.",
+          data: null,
+        });
+      }
+
+      const user = await User.findById(userId).select("-password -firebaseUid");
+      if (!user) {
+        return res.status(404).json({
+          code: 404,
+          message: "Không tìm thấy người dùng.",
+          data: null,
+        });
+      }
+
+      // Lấy toàn bộ đơn hàng của khách hàng này (sắp xếp mới nhất lên đầu)
+      const orders = await Order.find({ user: userId })
+        .populate({
+          path: "items.product",
+          select: "name image price category",
+        })
+        .sort({ createdAt: -1 });
+
+      const totalOrders = orders.length;
+
+      // Tính tổng chi tiêu: các đơn hàng hợp lệ không bị hủy
+      const nonCancelledOrders = orders.filter(
+        (o) =>
+          !["đã hủy", "cancelled"].includes(
+            String(o.status || "")
+              .trim()
+              .toLowerCase(),
+          ),
+      );
+      const completedOrders = orders.filter((o) =>
+        ["đã giao hàng", "đã hoàn thành", "delivered", "completed"].includes(
+          String(o.status || "")
+            .trim()
+            .toLowerCase(),
+        ),
+      );
+
+      const totalSpent = nonCancelledOrders.reduce((sum, o) => {
+        const amt = Number(o.totalAmount ?? o.totalPrice ?? o.subtotal ?? 0);
+        return sum + (isNaN(amt) ? 0 : amt);
+      }, 0);
+
+      const completedSpent = completedOrders.reduce((sum, o) => {
+        const amt = Number(o.totalAmount ?? o.totalPrice ?? o.subtotal ?? 0);
+        return sum + (isNaN(amt) ? 0 : amt);
+      }, 0);
+
+      // Thống kê đơn theo trạng thái
+      const statusCounts = {
+        pending: orders.filter((o) =>
+          ["chờ xác nhận", "pending"].includes(
+            String(o.status || "")
+              .trim()
+              .toLowerCase(),
+          ),
+        ).length,
+        processing: orders.filter((o) =>
+          ["đang chuẩn bị hàng", "processing"].includes(
+            String(o.status || "")
+              .trim()
+              .toLowerCase(),
+          ),
+        ).length,
+        shipping: orders.filter((o) =>
+          ["đang giao hàng", "shipping"].includes(
+            String(o.status || "")
+              .trim()
+              .toLowerCase(),
+          ),
+        ).length,
+        completed: completedOrders.length,
+        cancelled: orders.filter((o) =>
+          ["đã hủy", "cancelled"].includes(
+            String(o.status || "")
+              .trim()
+              .toLowerCase(),
+          ),
+        ).length,
+      };
+
+      return res.status(200).json({
+        code: 200,
+        message: "Lấy chi tiết hồ sơ khách hàng thành công",
+        data: {
+          profile: {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone || "",
+            address: user.address || "",
+            image: user.image || "",
+            role: user.role || "customer",
+            isOnline: !!user.isOnline,
+            lastActive: user.lastActive,
+            isBlocked: !!user.isBlocked,
+            blockReason: user.blockReason || "",
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt,
+          },
+          stats: {
+            totalOrders,
+            totalSpent,
+            completedSpent,
+            statusCounts,
+          },
+          orders,
+        },
+      });
+    } catch (error) {
+      return res.status(500).json({
+        code: 500,
+        message: "Lỗi máy chủ khi lấy chi tiết hồ sơ khách hàng.",
+        error: error.message,
+        data: null,
+      });
+    }
+  },
+);
 
 router.post("/logout", authenticateToken, async (req, res) => {
   try {
@@ -1024,8 +1376,8 @@ async function buildRecentActivities(limit = 10) {
         select: "name image price category",
         populate: {
           path: "category",
-          select: "name"
-        }
+          select: "name",
+        },
       })
       .sort({ createdAt: -1 }),
     Product.find({}).populate("category").sort({ createdAt: -1 }),
@@ -1048,7 +1400,9 @@ async function buildRecentActivities(limit = 10) {
     const name = order.user?.name || order.receiverName || "Khách hàng";
     const detail = `${name} · ${itemsCount} sản phẩm · ${formatVND(amount)}`;
     const products = (order.items || []).map((item) => ({
-      productId: String(item.product?._id || item.productId || item.product || ""),
+      productId: String(
+        item.product?._id || item.productId || item.product || "",
+      ),
       productName: item.productName || item.product?.name || "Sản phẩm",
       productImage: item.productImage || item.product?.image || "",
       colorId: item.colorId || "",
@@ -1150,65 +1504,82 @@ async function buildRecentActivities(limit = 10) {
 }
 
 // API Lấy danh sách hoạt động gần đây phân trang và lọc (Cho Admin Lazy Load)
-router.get("/admin/recent-activities", authenticateToken, authorizeRoles(...ADMIN_ROLES), async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 15;
-    const type = req.query.type || "all"; // all, order, product, user
-    const keyword = req.query.keyword || "";
-    const fromDate = req.query.fromDate;
-    const toDate = req.query.toDate;
+router.get(
+  "/admin/recent-activities",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 15;
+      const type = req.query.type || "all"; // all, order, product, user
+      const keyword = req.query.keyword || "";
+      const fromDate = req.query.fromDate;
+      const toDate = req.query.toDate;
 
-    let activities = await buildRecentActivities(0);
+      let activities = await buildRecentActivities(0);
 
-    // Filter by type
-    if (type && type !== "all") {
-      activities = activities.filter(act => {
-        if (type === "order") return act.type && act.type.startsWith("order_");
-        if (type === "product") return act.type && act.type.startsWith("product_");
-        if (type === "user") return act.type && (act.type.startsWith("user_") || act.type.startsWith("login_"));
-        return true;
-      });
-    }
-
-    // Filter by keyword
-    if (keyword) {
-      const kw = keyword.toLowerCase();
-      activities = activities.filter(act =>
-        (act.title && act.title.toLowerCase().includes(kw)) ||
-        (act.detail && act.detail.toLowerCase().includes(kw)) ||
-        (act.customerName && act.customerName.toLowerCase().includes(kw))
-      );
-    }
-
-    // Filter by date
-    if (fromDate) {
-      const from = new Date(fromDate);
-      activities = activities.filter(act => new Date(act.createdAt) >= from);
-    }
-    if (toDate) {
-      const to = new Date(toDate);
-      activities = activities.filter(act => new Date(act.createdAt) <= to);
-    }
-
-    const startIndex = (page - 1) * limit;
-    const paginatedActivities = activities.slice(startIndex, startIndex + limit);
-
-    res.status(200).json({
-      code: 200,
-      message: "Lấy danh sách hoạt động thành công",
-      data: paginatedActivities,
-      pagination: {
-        currentPage: page,
-        totalPages: Math.ceil(activities.length / limit) || 1,
-        totalItems: activities.length,
-        hasMore: activities.length > startIndex + limit
+      // Filter by type
+      if (type && type !== "all") {
+        activities = activities.filter((act) => {
+          if (type === "order")
+            return act.type && act.type.startsWith("order_");
+          if (type === "product")
+            return act.type && act.type.startsWith("product_");
+          if (type === "user")
+            return (
+              act.type &&
+              (act.type.startsWith("user_") || act.type.startsWith("login_"))
+            );
+          return true;
+        });
       }
-    });
-  } catch (error) {
-    res.status(500).json({ code: 500, message: error.message });
-  }
-});
+
+      // Filter by keyword
+      if (keyword) {
+        const kw = keyword.toLowerCase();
+        activities = activities.filter(
+          (act) =>
+            (act.title && act.title.toLowerCase().includes(kw)) ||
+            (act.detail && act.detail.toLowerCase().includes(kw)) ||
+            (act.customerName && act.customerName.toLowerCase().includes(kw)),
+        );
+      }
+
+      // Filter by date
+      if (fromDate) {
+        const from = new Date(fromDate);
+        activities = activities.filter(
+          (act) => new Date(act.createdAt) >= from,
+        );
+      }
+      if (toDate) {
+        const to = new Date(toDate);
+        activities = activities.filter((act) => new Date(act.createdAt) <= to);
+      }
+
+      const startIndex = (page - 1) * limit;
+      const paginatedActivities = activities.slice(
+        startIndex,
+        startIndex + limit,
+      );
+
+      res.status(200).json({
+        code: 200,
+        message: "Lấy danh sách hoạt động thành công",
+        data: paginatedActivities,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(activities.length / limit) || 1,
+          totalItems: activities.length,
+          hasMore: activities.length > startIndex + limit,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ code: 500, message: error.message });
+    }
+  },
+);
 
 // Thiết lập trạng thái ngoại tuyến (khi vuốt thoát app)
 router.post("/set-offline", authenticateToken, async (req, res) => {
@@ -1248,24 +1619,34 @@ router.put(
       }
 
       if (email !== undefined && !emailRegex.test(email)) {
-        return res.status(400).json({ code: 400, message: "Email không hợp lệ." });
+        return res
+          .status(400)
+          .json({ code: 400, message: "Email không hợp lệ." });
       }
 
       if (phone !== undefined && !phoneRegex.test(phone)) {
-        return res.status(400).json({ code: 400, message: "Số điện thoại phải đúng 10 chữ số." });
+        return res
+          .status(400)
+          .json({ code: 400, message: "Số điện thoại phải đúng 10 chữ số." });
       }
 
       if (password && password.trim() !== "") {
         if (!passwordRegex.test(password)) {
           return res.status(400).json({
             code: 400,
-            message: "Mật khẩu tối thiểu phải từ 8 ký tự trở lên, bao gồm cả chữ cái và số.",
+            message:
+              "Mật khẩu tối thiểu phải từ 8 ký tự trở lên, bao gồm cả chữ cái và số.",
           });
         }
       }
 
       if (role !== undefined) {
-        if (role.trim().toLowerCase() !== String(userToUpdate.role || '').trim().toLowerCase()) {
+        if (
+          role.trim().toLowerCase() !==
+          String(userToUpdate.role || "")
+            .trim()
+            .toLowerCase()
+        ) {
           return res.status(400).json({
             code: 400,
             message: "Không được phép thay đổi vai trò của người dùng.",
@@ -1325,21 +1706,32 @@ router.put(
       const { isBlocked, reason } = req.body;
 
       if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
-        return res.status(400).json({ code: 400, message: "ID người dùng không hợp lệ" });
+        return res
+          .status(400)
+          .json({ code: 400, message: "ID người dùng không hợp lệ" });
       }
 
       // Không cho phép tự khóa tài khoản của chính mình
       if (String(req.user.id) === String(targetUserId)) {
-        return res.status(400).json({ code: 400, message: "Bạn không thể tự khóa tài khoản của chính mình." });
+        return res
+          .status(400)
+          .json({
+            code: 400,
+            message: "Bạn không thể tự khóa tài khoản của chính mình.",
+          });
       }
 
       const userToUpdate = await User.findById(targetUserId);
       if (!userToUpdate) {
-        return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng." });
+        return res
+          .status(404)
+          .json({ code: 404, message: "Không tìm thấy người dùng." });
       }
 
       // Không cho phép khóa Super Admin khác
-      const targetRoleNormalized = String(userToUpdate.role || "").replace(/\s+/g, "").toLowerCase();
+      const targetRoleNormalized = String(userToUpdate.role || "")
+        .replace(/\s+/g, "")
+        .toLowerCase();
       if (["superadmin", "quảntrịviêntốicao"].includes(targetRoleNormalized)) {
         return res.status(403).json({
           code: 403,
@@ -1347,9 +1739,12 @@ router.put(
         });
       }
 
-      const shouldBlock = typeof isBlocked === "boolean" ? isBlocked : !userToUpdate.isBlocked;
+      const shouldBlock =
+        typeof isBlocked === "boolean" ? isBlocked : !userToUpdate.isBlocked;
       userToUpdate.isBlocked = shouldBlock;
-      userToUpdate.blockReason = shouldBlock ? (reason || "Vi phạm điều khoản dịch vụ") : "";
+      userToUpdate.blockReason = shouldBlock
+        ? reason || "Vi phạm điều khoản dịch vụ"
+        : "";
       userToUpdate.blockedAt = shouldBlock ? new Date() : null;
       if (shouldBlock) {
         userToUpdate.isOnline = false;
@@ -1390,67 +1785,95 @@ router.put(
     } catch (error) {
       return res.status(500).json({ code: 500, message: error.message });
     }
-  }
+  },
 );
 
 // Xoá người dùng (Chỉ Super Admin có quyền xóa Admin, không xóa Khách hàng hoặc Super Admin khác)
-router.delete("/delete-user/:id", authenticateToken, authorizeRoles("superadmin", "quản trị viên tối cao"), async (req, res) => {
-  try {
-    const userId = req.params.id;
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ code: 400, message: "ID người dùng không hợp lệ" });
+router.delete(
+  "/delete-user/:id",
+  authenticateToken,
+  authorizeRoles("superadmin", "quản trị viên tối cao"),
+  async (req, res) => {
+    try {
+      const userId = req.params.id;
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        return res
+          .status(400)
+          .json({ code: 400, message: "ID người dùng không hợp lệ" });
+      }
+
+      const userToDelete = await User.findById(userId);
+      if (!userToDelete) {
+        return res
+          .status(404)
+          .json({ code: 404, message: "Không tìm thấy người dùng" });
+      }
+
+      // Không cho phép tự xóa chính mình
+      if (String(req.user.id) === String(userId)) {
+        return res
+          .status(400)
+          .json({ code: 400, message: "Bạn không thể tự xóa chính mình" });
+      }
+
+      // Chỉ cho phép xóa tài khoản Admin (admin, quản lý cửa hàng, quản trị viên), không cho xóa customer hoặc superadmin khác
+      const targetRoleNormalized = String(userToDelete.role || "")
+        .replace(/\s+/g, "")
+        .toLowerCase();
+      const deletableRoles = ["admin", "quảnlýcửahàng", "quảntrịviên"];
+
+      if (!deletableRoles.includes(targetRoleNormalized)) {
+        return res.status(403).json({
+          code: 403,
+          message:
+            "Chỉ được phép xóa tài khoản Admin, không thể xóa khách hàng hoặc Quản trị viên tối cao khác.",
+        });
+      }
+
+      await User.findByIdAndDelete(userId);
+      res.status(200).json({ code: 200, message: "Xóa người dùng thành công" });
+    } catch (error) {
+      res.status(500).json({ code: 500, message: error.message });
     }
-
-    const userToDelete = await User.findById(userId);
-    if (!userToDelete) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng" });
-    }
-
-    // Không cho phép tự xóa chính mình
-    if (String(req.user.id) === String(userId)) {
-      return res.status(400).json({ code: 400, message: "Bạn không thể tự xóa chính mình" });
-    }
-
-    // Chỉ cho phép xóa tài khoản Admin (admin, quản lý cửa hàng, quản trị viên), không cho xóa customer hoặc superadmin khác
-    const targetRoleNormalized = String(userToDelete.role || "").replace(/\s+/g, "").toLowerCase();
-    const deletableRoles = ["admin", "quảnlýcửahàng", "quảntrịviên"];
-
-    if (!deletableRoles.includes(targetRoleNormalized)) {
-      return res.status(403).json({
-        code: 403,
-        message: "Chỉ được phép xóa tài khoản Admin, không thể xóa khách hàng hoặc Quản trị viên tối cao khác."
-      });
-    }
-
-    await User.findByIdAndDelete(userId);
-    res.status(200).json({ code: 200, message: "Xóa người dùng thành công" });
-  } catch (error) {
-    res.status(500).json({ code: 500, message: error.message });
-  }
-});
+  },
+);
 
 // Khách hàng tự xóa tài khoản (Yêu cầu nhập mật khẩu để xác thực)
 router.post("/delete-me", authenticateToken, async (req, res) => {
   try {
     const { password } = req.body;
     if (!password) {
-      return res.status(400).json({ code: 400, message: "Vui lòng nhập mật khẩu để xác nhận xóa tài khoản." });
+      return res
+        .status(400)
+        .json({
+          code: 400,
+          message: "Vui lòng nhập mật khẩu để xác nhận xóa tài khoản.",
+        });
     }
 
     const userId = req.user.id;
     const user = await User.findById(userId).select("+password");
     if (!user) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng" });
+      return res
+        .status(404)
+        .json({ code: 404, message: "Không tìm thấy người dùng" });
     }
 
     // Kiểm tra mật khẩu
     if (!user.password) {
-      return res.status(400).json({ code: 400, message: "Tài khoản Google chưa thiết lập mật khẩu." });
+      return res
+        .status(400)
+        .json({
+          code: 400,
+          message: "Tài khoản Google chưa thiết lập mật khẩu.",
+        });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ code: 400, message: "Mật khẩu không chính xác." });
+      return res
+        .status(400)
+        .json({ code: 400, message: "Mật khẩu không chính xác." });
     }
 
     // Tiến hành xóa cứng tài khoản người dùng
@@ -1466,12 +1889,19 @@ router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
     if (!email) {
-      return res.status(400).json({ code: 400, message: "Vui lòng cung cấp email." });
+      return res
+        .status(400)
+        .json({ code: 400, message: "Vui lòng cung cấp email." });
     }
 
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy tài khoản với email này." });
+      return res
+        .status(404)
+        .json({
+          code: 404,
+          message: "Không tìm thấy tài khoản với email này.",
+        });
     }
 
     // Tạo mã OTP gồm 6 chữ số
@@ -1516,16 +1946,22 @@ router.post("/verify-reset-otp", async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
     if (!email || !otp || !newPassword) {
-      return res.status(400).json({ code: 400, message: "Vui lòng điền đầy đủ các thông tin." });
+      return res
+        .status(400)
+        .json({ code: 400, message: "Vui lòng điền đầy đủ các thông tin." });
     }
 
     const user = await User.findOne({ email }).select("+password");
     if (!user) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy người dùng." });
+      return res
+        .status(404)
+        .json({ code: 404, message: "Không tìm thấy người dùng." });
     }
 
     if (!user.resetPasswordOtp || user.resetPasswordOtp !== otp) {
-      return res.status(400).json({ code: 400, message: "Mã OTP không chính xác." });
+      return res
+        .status(400)
+        .json({ code: 400, message: "Mã OTP không chính xác." });
     }
 
     if (user.resetPasswordOtpExpires < Date.now()) {
@@ -1533,7 +1969,9 @@ router.post("/verify-reset-otp", async (req, res) => {
     }
 
     if (newPassword.length < 6) {
-      return res.status(400).json({ code: 400, message: "Mật khẩu mới phải từ 6 ký tự trở lên." });
+      return res
+        .status(400)
+        .json({ code: 400, message: "Mật khẩu mới phải từ 6 ký tự trở lên." });
     }
 
     // Hash mật khẩu mới
@@ -1543,7 +1981,9 @@ router.post("/verify-reset-otp", async (req, res) => {
     user.resetPasswordOtpExpires = null;
     await user.save();
 
-    res.status(200).json({ code: 200, message: "Đặt lại mật khẩu thành công." });
+    res
+      .status(200)
+      .json({ code: 200, message: "Đặt lại mật khẩu thành công." });
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message });
   }
