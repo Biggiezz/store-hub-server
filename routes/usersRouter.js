@@ -2,6 +2,7 @@ var express = require("express");
 var router = express.Router();
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const JWT_SECRET = process.env.JWT_SECRET;
 const User = require("../models/users");
 const { authenticateToken, authorizeRoles } = require("../middlewares/auth");
 const upload = require("../middlewares/upload");
@@ -155,7 +156,7 @@ router.post("/login", async (req, res) => {
     // Tạo JWT token
     const token = jwt.sign(
       { id: user._id, role: user.role },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: "7d" }, // Token có giá trị trong 7 ngày
     );
 
@@ -279,7 +280,7 @@ router.post("/google-login", async (req, res) => {
 
     const token = jwt.sign(
       { id: user._id, role: "customer" },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: "7d" },
     );
 

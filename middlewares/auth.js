@@ -4,6 +4,8 @@ const jwt = require("jsonwebtoken");
 // 2. Khi gọi API bảo mật -> App gửi Token này ở Header: "Authorization: Bearer <token>".
 // 3. Server dùng hàm verify để giải mã Token -> nếu hợp lệ sẽ cho đi tiếp và gán user vào "req.user".
 
+const JWT_SECRET = process.env.JWT_SECRET;
+
 // Middleware xác thực Token (Authentication)
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
@@ -16,11 +18,13 @@ const authenticateToken = (req, res, next) => {
     });
   }
 
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+  jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
+      console.warn(`[AUTH] Token không hợp lệ hoặc hết hạn (${req.method} ${req.originalUrl}):`, err.message);
       return res.status(403).json({
         code: 403,
         message: "Token không hợp lệ hoặc đã hết hạn.",
+        error: err.message,
       });
     }
     req.user = user;
