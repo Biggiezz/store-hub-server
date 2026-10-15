@@ -67,8 +67,11 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // Kiểm tra xem email đã được đăng ký chưa
-    const existingUser = await User.findOne({ email });
+    // Chuẩn hóa và kiểm tra email đã được đăng ký chưa
+    const cleanEmail = String(email).trim().toLowerCase();
+    const existingUser = await User.findOne({
+      email: { $regex: new RegExp("^" + cleanEmail + "$", "i") },
+    });
     if (existingUser) {
       return res.status(400).json({
         code: 400,
@@ -83,7 +86,7 @@ router.post("/register", async (req, res) => {
     // Tạo user mới (mặc định role là "customer")
     const newUser = new User({
       name,
-      email,
+      email: cleanEmail,
       phone,
       password: hashedPassword,
       role: "customer",
@@ -101,6 +104,12 @@ router.post("/register", async (req, res) => {
       data: userResponse,
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({
+        code: 400,
+        message: "Email đã tồn tại trên hệ thống.",
+      });
+    }
     res.status(500).json({
       code: 500,
       message: "Lỗi máy chủ khi đăng ký tài khoản.",
@@ -1087,7 +1096,10 @@ router.post(
         });
       }
 
-      const existingUser = await User.findOne({ email });
+      const cleanEmail = String(email).trim().toLowerCase();
+      const existingUser = await User.findOne({
+        email: { $regex: new RegExp("^" + cleanEmail + "$", "i") },
+      });
       if (existingUser) {
         return res.status(400).json({
           code: 400,
@@ -1100,7 +1112,7 @@ router.post(
 
       const newUser = new User({
         name,
-        email,
+        email: cleanEmail,
         phone,
         role: role || "customer",
         password: hashedPassword,
@@ -1118,6 +1130,12 @@ router.post(
         data: userResponse,
       });
     } catch (error) {
+      if (error.code === 11000) {
+        return res.status(400).json({
+          code: 400,
+          message: "Email đã tồn tại trên hệ thống.",
+        });
+      }
       return res.status(500).json({
         code: 500,
         message: "Lỗi máy chủ khi thêm người dùng.",

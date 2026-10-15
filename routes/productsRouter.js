@@ -783,19 +783,24 @@ router.post(
       return res.status(400).json({ code: 400, message: "Tên danh mục là bắt buộc" });
     }
 
-    const image = req.file ? req.file.path : "";
-    const existingCategory = await Category.findOne({ name: name.trim() });
+    const cleanName = name.trim();
+    const existingCategory = await Category.findOne({
+      name: { $regex: new RegExp("^" + cleanName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i") },
+    });
     if (existingCategory) {
       return res.status(400).json({ code: 400, message: "Danh mục đã tồn tại" });
     }
 
     const newCategory = await Category.create({
-      name: name.trim(),
+      name: cleanName,
       image,
     });
 
     res.status(201).json({ code: 201, message: "Thêm danh mục thành công", data: newCategory });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ code: 400, message: "Danh mục đã tồn tại" });
+    }
     res.status(500).json({ code: 500, message: error.message });
   }
   },
@@ -814,13 +819,26 @@ router.put(
       return res.status(404).json({ code: 404, message: "Không tìm thấy danh mục" });
     }
 
-    if (name) category.name = name.trim();
+    if (name && name.trim()) {
+      const cleanName = name.trim();
+      const duplicateCategory = await Category.findOne({
+        _id: { $ne: req.params.id },
+        name: { $regex: new RegExp("^" + cleanName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i") },
+      });
+      if (duplicateCategory) {
+        return res.status(400).json({ code: 400, message: "Tên danh mục đã tồn tại" });
+      }
+      category.name = cleanName;
+    }
     if (isActive !== undefined) category.isActive = isActive === "true" || isActive === true;
     if (req.file) category.image = req.file.path;
 
     const updatedCategory = await category.save();
     res.status(200).json({ code: 200, message: "Cập nhật danh mục thành công", data: updatedCategory });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ code: 400, message: "Tên danh mục đã tồn tại" });
+    }
     res.status(500).json({ code: 500, message: error.message });
   }
   },
