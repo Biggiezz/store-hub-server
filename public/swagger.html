@@ -238,7 +238,7 @@
     <div class="sh-brand">
       <div class="sh-logo">SH</div>
       <div class="sh-title">
-        <h1>StoreHub RESTful API <span class="sh-version">v1.0.0</span></h1>
+        <h1>StoreHub RESTful API <span class="sh-version">v1.1.0</span></h1>
         <p>Hệ thống quản lý bán hàng đa kênh (Android App, Admin Web, Node.js Backend)</p>
       </div>
     </div>
@@ -283,7 +283,7 @@
       openapi: "3.0.3",
       info: {
         title: "StoreHub API Documentation",
-        version: "1.0.0",
+        version: "1.1.0",
         description: `
 ### 📖 Giới thiệu hệ sinh thái StoreHub
 Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) của hệ thống **StoreHub** (bao gồm Server Node.js/Express kết nối MongoDB Atlas, Cloudinary và ZaloPay).
@@ -291,6 +291,12 @@ Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) 
 #### 🛡️ Hướng dẫn xác thực (Authentication):
 - Các API có biểu tượng 🔒 ổ khóa yêu cầu **JWT Bearer Token**.
 - Hãy gọi API \`POST /users/login\` để nhận **token**, sau đó nhấn nút **Authorize** ở góc phải hoặc nút **🔑 Nhập Token Nhanh** ở trên cùng để lưu token một lần cho toàn bộ trang.
+
+#### 🌟 Điểm mới trong phiên bản v1.1.0 (Customer Loyalty & VIP Rewards):
+- 💎 **Lọc khách hàng thân thiết**: theo ngưỡng chi tiêu (\`minSpent\`) hoặc số đơn hoàn tất (\`minOrders\`).
+- 🎖️ **Phân loại 4 thứ hạng**: Đồng, Bạc, Vàng, Kim Cương kèm quyền lợi & voucher code gợi ý.
+- 📥 **Xuất danh sách VIP**: tải file CSV (chuẩn UTF-8 BOM, mở bằng Excel tiếng Việt không lỗi font) hoặc JSON.
+- 🎁 **Chiến dịch voucher tri ân**: gửi voucher ưu đãi cho khách hàng VIP và lưu ActivityLog.
         `
       },
       servers: serverList,
@@ -302,6 +308,10 @@ Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) 
         {
           name: "2. Admin Dashboard & Users Management",
           description: "Dành riêng cho Quản trị viên: Thống kê doanh thu, số liệu tổng quan, quản lý danh sách người dùng"
+        },
+        {
+          name: "2.1 Customer Loyalty & VIP (Khách hàng thân thiết)",
+          description: "Dành cho Quản trị viên: Lọc khách hàng thân thiết theo ngưỡng chi tiêu / số đơn, phân loại 4 thứ hạng (Đồng, Bạc, Vàng, Kim Cương), xuất danh sách VIP (CSV/JSON) và gửi voucher tri ân"
         },
         {
           name: "3. Products & Categories",
@@ -758,7 +768,7 @@ Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) 
 
         "/users/admin/loyal-customers": {
           get: {
-            tags: ["2. Admin Dashboard & Users Management"],
+            tags: ["2.1 Customer Loyalty & VIP (Khách hàng thân thiết)"],
             summary: "Lọc và xem danh sách khách hàng thân thiết (US-Loyalty)",
             description: "Lọc khách hàng theo ngưỡng tổng chi tiêu (ví dụ: > 10 triệu) hoặc số đơn hoàn tất (ví dụ: > 5 đơn), phân loại thứ hạng Đồng, Bạc, Vàng, Kim Cương.",
             security: [{ BearerAuth: [] }],
@@ -841,7 +851,7 @@ Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) 
 
         "/users/admin/loyal-customers/tiers": {
           get: {
-            tags: ["2. Admin Dashboard & Users Management"],
+            tags: ["2.1 Customer Loyalty & VIP (Khách hàng thân thiết)"],
             summary: "Lấy danh sách cấu hình và đặc quyền của các thứ hạng khách hàng",
             description: "Trả về tiêu chí xét duyệt (ngưỡng chi tiêu, số đơn), mã voucher gợi ý và đặc quyền của từng thứ hạng (Đồng, Bạc, Vàng, Kim Cương).",
             security: [{ BearerAuth: [] }],
@@ -853,7 +863,7 @@ Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) 
 
         "/users/admin/loyal-customers/export-vip": {
           get: {
-            tags: ["2. Admin Dashboard & Users Management"],
+            tags: ["2.1 Customer Loyalty & VIP (Khách hàng thân thiết)"],
             summary: "Xuất danh sách khách hàng VIP để gửi voucher tri ân",
             description: "Xuất danh sách khách hàng VIP (hoặc theo thứ hạng) dưới định dạng file CSV chuẩn UTF-8 BOM tải về trực tiếp, hoặc định dạng JSON kèm gợi ý voucher.",
             security: [{ BearerAuth: [] }],
@@ -882,7 +892,7 @@ Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) 
 
         "/users/admin/loyal-customers/send-vip-voucher": {
           post: {
-            tags: ["2. Admin Dashboard & Users Management"],
+            tags: ["2.1 Customer Loyalty & VIP (Khách hàng thân thiết)"],
             summary: "Gửi chiến dịch voucher tri ân đến danh sách khách hàng VIP",
             description: "Gửi voucher tri ân và lưu lịch sử chiến dịch vào nhật ký hoạt động hệ thống (ActivityLog).",
             security: [{ BearerAuth: [] }],
