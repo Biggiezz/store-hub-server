@@ -756,6 +756,162 @@ Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) 
           }
         },
 
+        "/users/admin/loyal-customers": {
+          get: {
+            tags: ["2. Admin Dashboard & Users Management"],
+            summary: "Lọc và xem danh sách khách hàng thân thiết (US-Loyalty)",
+            description: "Lọc khách hàng theo ngưỡng tổng chi tiêu (ví dụ: > 10 triệu) hoặc số đơn hoàn tất (ví dụ: > 5 đơn), phân loại thứ hạng Đồng, Bạc, Vàng, Kim Cương.",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "minSpent", in: "query", description: "Ngưỡng chi tiêu tối thiểu (VNĐ), ví dụ: 10000000", schema: { type: "number" } },
+              { name: "maxSpent", in: "query", description: "Ngưỡng chi tiêu tối đa (VNĐ)", schema: { type: "number" } },
+              { name: "minOrders", in: "query", description: "Ngưỡng số đơn hoàn tất tối thiểu, ví dụ: 5", schema: { type: "integer" } },
+              { name: "maxOrders", in: "query", description: "Ngưỡng số đơn hoàn tất tối đa", schema: { type: "integer" } },
+              { name: "rank", in: "query", description: "Lọc theo thứ hạng: Đồng, Bạc, Vàng, Kim Cương (hỗ trợ phẩy phân cách: Vàng,Kim Cương)", schema: { type: "string" } },
+              { name: "isVip", in: "query", description: "Lọc khách hàng VIP (Vàng, Kim Cương): true hoặc false", schema: { type: "boolean" } },
+              { name: "search", in: "query", description: "Tìm kiếm theo họ tên, email hoặc số điện thoại", schema: { type: "string" } },
+              { name: "filterLogic", in: "query", description: "Logic kết hợp minSpent và minOrders: 'OR' (mặc định) hoặc 'AND'", schema: { type: "string", enum: ["OR", "AND"], default: "OR" } },
+              { name: "sortBy", in: "query", description: "Trường sắp xếp", schema: { type: "string", enum: ["totalSpent", "completedOrdersCount", "totalOrdersCount", "name", "createdAt", "lastOrderDate"], default: "totalSpent" } },
+              { name: "sortOrder", in: "query", description: "Thứ tự sắp xếp", schema: { type: "string", enum: ["desc", "asc"], default: "desc" } },
+              { name: "page", in: "query", description: "Trang hiện tại", schema: { type: "integer", default: 1 } },
+              { name: "limit", in: "query", description: "Số lượng mỗi trang (0 hoặc 'all' để lấy toàn bộ)", schema: { type: "integer", default: 10 } }
+            ],
+            responses: {
+              200: {
+                description: "Lấy danh sách khách hàng thân thiết thành công",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        code: { type: "integer", example: 200 },
+                        message: { type: "string", example: "Lấy danh sách khách hàng thân thiết thành công" },
+                        data: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              _id: { type: "string" },
+                              name: { type: "string" },
+                              email: { type: "string" },
+                              phone: { type: "string" },
+                              stats: {
+                                type: "object",
+                                properties: {
+                                  totalSpent: { type: "number", example: 12500000 },
+                                  completedOrdersCount: { type: "integer", example: 11 },
+                                  totalOrdersCount: { type: "integer", example: 12 },
+                                  lastOrderDate: { type: "string" }
+                                }
+                              },
+                              tier: {
+                                type: "object",
+                                properties: {
+                                  key: { type: "string", example: "GOLD" },
+                                  name: { type: "string", example: "Vàng" },
+                                  isVip: { type: "boolean", example: true },
+                                  suggestedVoucher: {
+                                    type: "object",
+                                    properties: {
+                                      code: { type: "string", example: "VIPGOLD10" },
+                                      discountPercent: { type: "number", example: 10 }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        summary: {
+                          type: "object",
+                          properties: {
+                            totalFilteredCustomers: { type: "integer" },
+                            vipCount: { type: "integer" },
+                            tierCounts: { type: "object" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+
+        "/users/admin/loyal-customers/tiers": {
+          get: {
+            tags: ["2. Admin Dashboard & Users Management"],
+            summary: "Lấy danh sách cấu hình và đặc quyền của các thứ hạng khách hàng",
+            description: "Trả về tiêu chí xét duyệt (ngưỡng chi tiêu, số đơn), mã voucher gợi ý và đặc quyền của từng thứ hạng (Đồng, Bạc, Vàng, Kim Cương).",
+            security: [{ BearerAuth: [] }],
+            responses: {
+              200: { description: "Thành công" }
+            }
+          }
+        },
+
+        "/users/admin/loyal-customers/export-vip": {
+          get: {
+            tags: ["2. Admin Dashboard & Users Management"],
+            summary: "Xuất danh sách khách hàng VIP để gửi voucher tri ân",
+            description: "Xuất danh sách khách hàng VIP (hoặc theo thứ hạng) dưới định dạng file CSV chuẩn UTF-8 BOM tải về trực tiếp, hoặc định dạng JSON kèm gợi ý voucher.",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              { name: "format", in: "query", description: "Định dạng xuất: 'csv' (tải file) hoặc 'json'", schema: { type: "string", enum: ["csv", "json"], default: "csv" } },
+              { name: "targetRank", in: "query", description: "Nhóm khách hàng: 'all_vip' (Kim Cương + Vàng), 'Kim Cương', 'Vàng', 'Bạc', 'all'", schema: { type: "string", default: "all_vip" } },
+              { name: "minSpent", in: "query", description: "Lọc thêm theo ngưỡng chi tiêu tối thiểu", schema: { type: "number" } },
+              { name: "minOrders", in: "query", description: "Lọc thêm theo số đơn hoàn tất tối thiểu", schema: { type: "integer" } },
+              { name: "search", in: "query", description: "Tìm kiếm từ khóa", schema: { type: "string" } }
+            ],
+            responses: {
+              200: {
+                description: "Tải file CSV danh sách khách hàng VIP hoặc trả về JSON",
+                content: {
+                  "text/csv": {
+                    schema: { type: "string", format: "binary" }
+                  },
+                  "application/json": {
+                    schema: { type: "object" }
+                  }
+                }
+              }
+            }
+          }
+        },
+
+        "/users/admin/loyal-customers/send-vip-voucher": {
+          post: {
+            tags: ["2. Admin Dashboard & Users Management"],
+            summary: "Gửi chiến dịch voucher tri ân đến danh sách khách hàng VIP",
+            description: "Gửi voucher tri ân và lưu lịch sử chiến dịch vào nhật ký hoạt động hệ thống (ActivityLog).",
+            security: [{ BearerAuth: [] }],
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["voucherCode"],
+                    properties: {
+                      targetRank: { type: "string", example: "all_vip", description: "all_vip, Kim Cương, Vàng, Bạc" },
+                      voucherCode: { type: "string", example: "VIPGOLD10", description: "Mã voucher tri ân" },
+                      discountPercent: { type: "number", example: 10, description: "Phần trăm giảm giá" },
+                      campaignTitle: { type: "string", example: "Tri ân Khách hàng Thân thiết StoreHub", description: "Tiêu đề chiến dịch" },
+                      message: { type: "string", example: "Cảm ơn bạn đã luôn tin tưởng và đồng hành cùng StoreHub!", description: "Nội dung lời nhắn" },
+                      sendEmail: { type: "boolean", example: false, description: "Gửi email cho khách hàng nếu có cấu hình mail" }
+                    }
+                  }
+                }
+              }
+            },
+            responses: {
+              200: { description: "Gửi voucher tri ân thành công" },
+              400: { description: "Thiếu thông tin hoặc không tìm thấy khách hàng phù hợp" }
+            }
+          }
+        },
+
         /* ========================================================================= */
         /* 3. PRODUCTS & CATEGORIES                                                  */
         /* ========================================================================= */

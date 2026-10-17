@@ -11,6 +11,7 @@ const Order = require("../models/Order");
 const Product = require("../models/Product");
 const mongoose = require("mongoose");
 const { getFirebaseAuth } = require("../config/firebaseAdmin");
+const loyaltyService = require("../services/loyaltyService");
 
 function toSafeUser(user) {
   const safeUser = user.toObject ? user.toObject() : { ...user };
@@ -1316,6 +1317,10 @@ router.get(
             completedSpent,
             statusCounts,
           },
+          tier: loyaltyService.classifyCustomerTier(
+            completedSpent,
+            statusCounts.completed,
+          ),
           orders,
         },
       });
@@ -1325,6 +1330,150 @@ router.get(
         message: "Lỗi máy chủ khi lấy chi tiết hồ sơ khách hàng.",
         error: error.message,
         data: null,
+      });
+    }
+  },
+);
+
+// =========================================================================
+// CHỨC NĂNG: QUẢN LÝ KHÁCH HÀNG THÂN THIẾT & TRI ÂN VIP (CUSTOMER LOYALTY)
+// =========================================================================
+
+// 1. Lọc và xem danh sách khách hàng thân thiết (theo tổng chi tiêu hoặc số đơn hoàn tất)
+router.get(
+  "/admin/loyal-customers",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const result = await loyaltyService.getLoyalCustomers(req.query);
+      return res.status(200).json({
+        code: 200,
+        message: "Lấy danh sách khách hàng thân thiết thành công",
+        data: result.customers,
+        summary: result.summary,
+        pagination: result.pagination,
+      });
+    } catch (error) {
+      console.error("Lỗi khi lấy danh sách khách hàng thân thiết:", error);
+      return res.status(500).json({
+        code: 500,
+        message: "Lỗi máy chủ khi lấy danh sách khách hàng thân thiết.",
+        error: error.message,
+        data: null,
+      });
+    }
+  },
+);
+
+// 2. Lấy thông tin cấu hình và đặc quyền của các thứ hạng (Đồng, Bạc, Vàng, Kim Cương)
+router.get(
+  "/admin/loyal-customers/tiers",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      return res.status(200).json({
+        code: 200,
+        message: "Lấy danh sách cấu hình thứ hạng khách hàng thành công",
+        data: Object.values(loyaltyService.LOYALTY_TIERS),
+      });
+    } catch (error) {
+      return res.status(500).json({
+        code: 500,
+        message: "Lỗi máy chủ khi lấy thông tin thứ hạng.",
+        error: error.message,
+      });
+    }
+  },
+);
+
+// 3. Xuất danh sách khách hàng VIP để gửi voucher tri ân (Hỗ trợ file CSV hoặc JSON)
+router.get(
+  "/admin/loyal-customers/export-vip",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { format = "csv" } = req.query;
+      const exportResult = await loyaltyService.exportVipCustomers(req.query);
+
+      if (String(format).toLowerCase() === "csv") {
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${exportResult.filename}"`,
+        );
+        // Expose header để client/front-end đọc được tên file tải về
+        res.setHeader(
+          "Access-Control-Expose-Headers",
+          "Content-Disposition",
+        );
+        return res
+          .status(200)
+          .send(Buffer.from(exportResult.content, "utf8"));
+      }
+
+      return res.status(200).json({
+        code: 200,
+        message: "Xuất danh sách khách hàng VIP thành công",
+        data: exportResult,
+      });
+    } catch (error) {
+      console.error("Lỗi khi xuất danh sách khách hàng VIP:", error);
+      return res.status(500).json({
+        code: 500,
+        message: "Lỗi máy chủ khi xuất danh sách khách hàng VIP.",
+        error: error.message,
+      });
+    }
+  },
+);
+
+// 4. Gửi voucher tri ân đến danh sách khách hàng VIP
+router.post(
+  "/admin/loyal-customers/send-vip-voucher",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const {
+        targetRank = "all_vip",
+        voucherCode,
+        discountPercent = 10,
+        campaignTitle = "Tri ân Khách hàng Thân thiết StoreHub",
+        message = "Cảm ơn bạn đã luôn tin tưởng và đồng hành cùng StoreHub!",
+        sendEmail = false,
+      } = req.body;
+
+      if (!voucherCode || !voucherCode.trim()) {
+        return res.status(400).json({
+          code: 400,
+          message: "Vui lòng cung cấp mã voucher cần gửi (voucherCode).",
+        });
+      }
+
+      const result = await loyaltyService.sendVipVoucherCampaign({
+        targetRank,
+        voucherCode: voucherCode.trim(),
+        discountPercent: Number(discountPercent) || 10,
+        campaignTitle,
+        message,
+        sendEmail,
+        adminUser: req.user,
+      });
+
+      return res.status(result.success ? 200 : 400).json({
+        code: result.success ? 200 : 400,
+        message: result.message,
+        data: result,
+      });
+    } catch (error) {
+      console.error("Lỗi khi gửi voucher tri ân khách hàng VIP:", error);
+      return res.status(500).json({
+        code: 500,
+        message: "Lỗi máy chủ khi gửi voucher tri ân khách hàng VIP.",
+        error: error.message,
       });
     }
   },
