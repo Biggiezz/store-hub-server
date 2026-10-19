@@ -1113,4 +1113,115 @@ router.delete(
   },
 );
 
+/**
+ * US25 - Xem danh sách và lọc đánh giá sản phẩm
+ * GET /api/productsRouter/get-reviews?page=1&limit=10&rating=5&search=
+ */
+router.get(
+  "/get-reviews",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(
+        100,
+        Math.max(1, parseInt(req.query.limit, 10) || 10),
+      );
+
+      const ratingParam = String(req.query.rating || "").trim();
+      const search = String(req.query.search || "").trim();
+
+      if (ratingParam && !/^[1-5]$/.test(ratingParam)) {
+        return res.status(400).json({
+          code: 400,
+          message: "Số sao lọc phải từ 1 đến 5",
+        });
+      }
+
+      const products = await Product.find({})
+        .select("name image images reviews")
+        .lean();
+
+      let reviews = [];
+
+      for (const product of products) {
+        for (const review of product.reviews || []) {
+          const reviewRating = Number(review.rating || 0);
+
+          if (ratingParam && reviewRating !== Number(ratingParam)) {
+            continue;
+          }
+
+          if (search) {
+            const keyword = search.toLowerCase();
+            const customerName = String(
+              review.customerName || "",
+            ).toLowerCase();
+            const content = String(review.content || "").toLowerCase();
+            const productName = String(product.name || "").toLowerCase();
+
+            if (
+              !customerName.includes(keyword) &&
+              !content.includes(keyword) &&
+              !productName.includes(keyword)
+            ) {
+              continue;
+            }
+          }
+
+          reviews.push({
+            ...review,
+            reviewId: String(review._id),
+            productId: String(product._id),
+            productName: product.name || "",
+            productImage: product.image || product.images?.[0] || "",
+          });
+        }
+      }
+
+      // Sắp xếp đánh giá mới nhất trước.
+      // createdAt hiện được lưu dưới dạng dd/mm/yyyy.
+      const toTimestamp = (dateString) => {
+        const match = String(dateString || "").match(
+          /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/,
+        );
+
+        if (!match) return 0;
+
+        const [, day, month, year] = match;
+        return new Date(Number(year), Number(month) - 1, Number(day)).getTime();
+      };
+
+      reviews.sort(
+        (a, b) => toTimestamp(b.createdAt) - toTimestamp(a.createdAt),
+      );
+
+      const total = reviews.length;
+      const totalPages = Math.ceil(total / limit);
+      const startIndex = (page - 1) * limit;
+      const paginatedReviews = reviews.slice(startIndex, startIndex + limit);
+
+      return res.status(200).json({
+        code: 200,
+        message: "Lấy danh sách đánh giá thành công",
+        data: paginatedReviews,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+        },
+      });
+    } catch (error) {
+      console.error("GET /get-reviews error:", error);
+
+      return res.status(500).json({
+        code: 500,
+        message: "Không thể lấy danh sách đánh giá",
+      });
+    }
+  },
+);
+
 module.exports = router;
