@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
 const Product = require("../models/Product");
@@ -10,7 +10,7 @@ const multer = require("multer");
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const cloudinary = require("../config/cloudinary");
 const { authenticateToken, authorizeRoles } = require("../middlewares/auth");
-const ADMIN_ROLES = ["admin", "superadmin", "quản lý cửa hàng", "quản trị viên tối cao", "quản trị viên"];
+const ADMIN_ROLES = ["admin", "superadmin", "quß║ún l├╜ cß╗¡a h├áng", "quß║ún trß╗ï vi├¬n tß╗æi cao", "quß║ún trß╗ï vi├¬n"];
 
 const redis = require("redis");
 let client = null;
@@ -23,11 +23,11 @@ const productSort = (sort) => ({
 
 const resolveCategoryQuery = async (category) => {
   const categoryMap = {
-    "1": "Điện thoại",
-    "2": "Máy tính",
+    "1": "─Éiß╗çn thoß║íi",
+    "2": "M├íy t├¡nh",
     "3": "Tai nghe",
-    "4": "Đồng hồ",
-    "laptop": "Máy tính"
+    "4": "─Éß╗ông hß╗ô",
+    "laptop": "M├íy t├¡nh"
   };
 
   let targetCategory = categoryMap[category] || category;
@@ -44,7 +44,7 @@ const resolveCategoryQuery = async (category) => {
   }
 };
 
-// --- Code gốc của team (được comment lại để tham chiếu) ---
+// --- Code gß╗æc cß╗ºa team (─æ╞░ß╗úc comment lß║íi ─æß╗â tham chiß║┐u) ---
 // if (client) {
 //   client.on("error", (error) => console.error(`Redis error: ${error.message}`));
 //   client
@@ -54,25 +54,25 @@ const resolveCategoryQuery = async (category) => {
 //     );
 // }
 
-// --- Code xử lý Redis an toàn cho máy local (tự động chuyển sang MongoDB nếu chưa bật Redis) ---
+// --- Code xß╗¡ l├╜ Redis an to├án cho m├íy local (tß╗▒ ─æß╗Öng chuyß╗ân sang MongoDB nß║┐u ch╞░a bß║¡t Redis) ---
 if (process.env.REDIS_URL) {
   client = redis.createClient({
     url: process.env.REDIS_URL,
     socket: {
-      reconnectStrategy: false, // Tắt tự động kết nối lại liên tục để không bị rác terminal nếu chưa cài Redis Server
+      reconnectStrategy: false, // Tß║»t tß╗▒ ─æß╗Öng kß║┐t nß╗æi lß║íi li├¬n tß╗Ñc ─æß╗â kh├┤ng bß╗ï r├íc terminal nß║┐u ch╞░a c├ái Redis Server
     },
   });
 
   client.on("error", () => {
-    // Bỏ qua log rác khi không có dịch vụ Redis trên máy
+    // Bß╗Å qua log r├íc khi kh├┤ng c├│ dß╗ïch vß╗Ñ Redis tr├¬n m├íy
   });
 
   client
     .connect()
-    .then(() => console.log("✅ Redis Connected Successfully"))
+    .then(() => console.log("Γ£à Redis Connected Successfully"))
     .catch(() => {
       console.log(
-        "⚠️ Máy cục bộ chưa chạy Redis Server (Tự động bỏ qua Redis, dùng MongoDB trực tiếp).",
+        "ΓÜá∩╕Å M├íy cß╗Ñc bß╗Ö ch╞░a chß║íy Redis Server (Tß╗▒ ─æß╗Öng bß╗Å qua Redis, d├╣ng MongoDB trß╗▒c tiß║┐p).",
       );
     });
 }
@@ -84,7 +84,7 @@ router.get("/get-all-product", async (req, res) => {
     const limit = parseInt(req.query.limit) || 6;
     const skip = (page - 1) * limit;
 
-    // Lấy tổng số lượng sản phẩm để Client biết khi nào hết sản phẩm
+    // Lß║Ñy tß╗òng sß╗æ l╞░ß╗úng sß║ún phß║⌐m ─æß╗â Client biß║┐t khi n├áo hß║┐t sß║ún phß║⌐m
     const category = String(req.query.category || "").trim();
     const status = String(req.query.status || "").trim();
     const sort = String(req.query.sort || "").trim();
@@ -92,14 +92,14 @@ router.get("/get-all-product", async (req, res) => {
       ? status === "active"
         ? { $or: [{ status: "active" }, { status: { $exists: false } }] }
         : { status }
-      : { status: { $nin: ["inactive", "Ngừng bán", "hidden"] } };
+      : { status: { $nin: ["inactive", "Ngß╗½ng b├ín", "hidden"] } };
 
     if (category) {
       query.category = await resolveCategoryQuery(category);
     }
     const totalProducts = await Product.countDocuments(query);
 
-    // Lấy danh sách sản phẩm theo page và limit
+    // Lß║Ñy danh s├ích sß║ún phß║⌐m theo page v├á limit
     const products = await Product.find(query)
       .collation({ locale: "vi", strength: 1 })
       .sort(productSort(sort))
@@ -109,7 +109,7 @@ router.get("/get-all-product", async (req, res) => {
 
     res.status(200).json({
       code: 200,
-      message: "Lấy danh sách sản phẩm thành công",
+      message: "Lß║Ñy danh s├ích sß║ún phß║⌐m th├ánh c├┤ng",
       data: products,
       pagination: {
         totalProducts,
@@ -129,7 +129,7 @@ router.get("/get-categories", async (req, res) => {
     const categories = await Category.find({ isActive: true });
     res.status(200).json({
       code: 200,
-      message: "Lấy danh sách danh mục thành công",
+      message: "Lß║Ñy danh s├ích danh mß╗Ñc th├ánh c├┤ng",
       data: categories,
     });
   } catch (error) {
@@ -146,7 +146,7 @@ router.get("/get-latest-product", async (req, res) => {
       .limit(4);
     res.status(200).json({
       code: 200,
-      message: "Lấy danh sách sản phẩm mới nhất thành công",
+      message: "Lß║Ñy danh s├ích sß║ún phß║⌐m mß╗¢i nhß║Ñt th├ánh c├┤ng",
       data: latestProducts,
     });
   } catch (error) {
@@ -160,18 +160,18 @@ router.get("/get-product-by-id/:id", async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res
         .status(400)
-        .json({ code: 400, message: "ID sản phẩm không hợp lệ", data: null });
+        .json({ code: 400, message: "ID sß║ún phß║⌐m kh├┤ng hß╗úp lß╗ç", data: null });
     }
 
     const product = await Product.findById(req.params.id).populate("category");
     if (!product) {
       return res
         .status(404)
-        .json({ code: 404, message: "Không tìm thấy sản phẩm", data: null });
+        .json({ code: 404, message: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m", data: null });
     }
     res.status(200).json({
       code: 200,
-      message: "Lấy chi tiết sản phẩm thành công",
+      message: "Lß║Ñy chi tiß║┐t sß║ún phß║⌐m th├ánh c├┤ng",
       data: product,
     });
   } catch (error) {
@@ -197,14 +197,120 @@ const storageReview = new CloudinaryStorage({
 
 const uploadReview = multer({
   storage: storageReview,
-  limits: { fileSize: 30 * 1024 * 1024 }, // Giới hạn 30MB
+  limits: { fileSize: 30 * 1024 * 1024 }, // Giß╗¢i hß║ín 30MB
 });
+
+/**
+ * US25: Danh s├ích ─æ├ính gi├í sß║ún phß║⌐m d├ánh cho quß║ún trß╗ï vi├¬n.
+ * GET /api/productsRouter/admin-reviews?rating=5&status=unreplied
+ */
+router.get(
+  "/admin-reviews",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const ratingParam = String(req.query.rating || "all");
+      const status = String(req.query.status || "all");
+
+      if (
+        ratingParam !== "all" &&
+        !["1", "2", "3", "4", "5"].includes(ratingParam)
+      ) {
+        return res.status(400).json({
+          code: 400,
+          message: "Bß╗Ö lß╗ìc sß╗æ sao kh├┤ng hß╗úp lß╗ç.",
+        });
+      }
+
+      if (!["all", "replied", "unreplied"].includes(status)) {
+        return res.status(400).json({
+          code: 400,
+          message: "Bß╗Ö lß╗ìc trß║íng th├íi phß║ún hß╗ôi kh├┤ng hß╗úp lß╗ç.",
+        });
+      }
+
+      const products = await Product.find(
+        { "reviews.0": { $exists: true } },
+        { name: 1, reviews: 1 },
+      ).lean();
+
+      const reviews = [];
+
+      for (const product of products) {
+        for (const review of product.reviews || []) {
+          const rating = Number(review.rating || 0);
+          const replyContent = String(review.replyContent || "").trim();
+          const replied = replyContent.length > 0;
+
+          if (ratingParam !== "all" && rating !== Number(ratingParam)) {
+            continue;
+          }
+
+          if (status === "replied" && !replied) continue;
+          if (status === "unreplied" && replied) continue;
+
+          reviews.push({
+            _id: String(review._id),
+            productId: String(product._id),
+            productName: product.name || "Sß║ún phß║⌐m kh├┤ng x├íc ─æß╗ïnh",
+            customerName: review.customerName || "Kh├ích h├áng",
+            rating,
+            content: review.content || "",
+            createdAt: review.createdAt || "",
+            replyContent,
+            replyCreatedAt: review.replyCreatedAt || "",
+            status: replied ? "replied" : "unreplied",
+          });
+        }
+      }
+
+      const parseReviewDate = (value) => {
+        if (!value) return 0;
+
+        const dateText = String(value);
+        const vnDate = dateText.match(
+          /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/,
+        );
+
+        if (vnDate) {
+          return new Date(
+            Number(vnDate[3]),
+            Number(vnDate[2]) - 1,
+            Number(vnDate[1]),
+          ).getTime();
+        }
+
+        const timestamp = new Date(dateText).getTime();
+        return Number.isNaN(timestamp) ? 0 : timestamp;
+      };
+
+      reviews.sort(
+        (a, b) => parseReviewDate(b.createdAt) - parseReviewDate(a.createdAt),
+      );
+
+      return res.status(200).json({
+        code: 200,
+        message: "Lß║Ñy danh s├ích ─æ├ính gi├í th├ánh c├┤ng.",
+        data: reviews,
+        total: reviews.length,
+      });
+    } catch (error) {
+      console.error("[US25] Lß╗ùi lß║Ñy danh s├ích ─æ├ính gi├í:", error);
+
+      return res.status(500).json({
+        code: 500,
+        message: "Kh├┤ng thß╗â lß║Ñy danh s├ích ─æ├ính gi├í.",
+      });
+    }
+  },
+);
 
 // POST add a product review
 router.post("/add-review", authenticateToken, (req, res) => {
   uploadReview.array("media", 5)(req, res, async (uploadError) => {
     if (uploadError) {
-      return res.status(400).json({ code: 400, message: "Lỗi tải tệp: " + uploadError.message });
+      return res.status(400).json({ code: 400, message: "Lß╗ùi tß║úi tß╗çp: " + uploadError.message });
     }
 
     try {
@@ -212,19 +318,19 @@ router.post("/add-review", authenticateToken, (req, res) => {
       if (!productId || !customerName?.trim() || rating === undefined || !content?.trim()) {
         return res
           .status(400)
-          .json({ code: 400, message: "Thiếu thông tin đánh giá" });
+          .json({ code: 400, message: "Thiß║┐u th├┤ng tin ─æ├ính gi├í" });
       }
 
       const r = parseFloat(rating);
       if (isNaN(r) || r < 1 || r > 5) {
-        return res.status(400).json({ code: 400, message: "Điểm đánh giá phải từ 1 đến 5 sao" });
+        return res.status(400).json({ code: 400, message: "─Éiß╗âm ─æ├ính gi├í phß║úi tß╗½ 1 ─æß║┐n 5 sao" });
       }
 
       const product = await Product.findById(productId);
       if (!product) {
         return res
           .status(404)
-          .json({ code: 404, message: "Không tìm thấy sản phẩm" });
+          .json({ code: 404, message: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m" });
       }
 
       // Check if order was already reviewed
@@ -233,14 +339,14 @@ router.post("/add-review", authenticateToken, (req, res) => {
         if (order && order.isReviewed) {
           return res
             .status(400)
-            .json({ code: 400, message: "Đơn hàng này đã được đánh giá trước đó" });
+            .json({ code: 400, message: "─É╞ín h├áng n├áy ─æ├ú ─æ╞░ß╗úc ─æ├ính gi├í tr╞░ß╗¢c ─æ├│" });
         }
       }
 
       const now = new Date();
       const formattedDate = `${now.getDate()}/${now.getMonth() + 1}/${now.getFullYear()}`;
 
-      // Lấy danh sách URL của hình ảnh/video tải lên từ Cloudinary
+      // Lß║Ñy danh s├ích URL cß╗ºa h├¼nh ß║únh/video tß║úi l├¬n tß╗½ Cloudinary
       const mediaUrls = req.files ? req.files.map(file => file.path) : [];
 
       const newReview = {
@@ -270,12 +376,12 @@ router.post("/add-review", authenticateToken, (req, res) => {
         await Order.findByIdAndUpdate(orderId, { isReviewed: true });
       }
 
-      // Populate category trước khi trả về để tránh lỗi JsonSyntaxException ở Client Android
+      // Populate category tr╞░ß╗¢c khi trß║ú vß╗ü ─æß╗â tr├ính lß╗ùi JsonSyntaxException ß╗ƒ Client Android
       const populatedProduct = await Product.findById(product._id).populate("category");
 
       res.status(200).json({
         code: 200,
-        message: "Đã thêm đánh giá thành công",
+        message: "─É├ú th├¬m ─æ├ính gi├í th├ánh c├┤ng",
         data: populatedProduct,
       });
     } catch (error) {
@@ -291,18 +397,33 @@ router.post(
   async (req, res) => {
   try {
     const { productId, reviewId, replyContent } = req.body;
-    if (!productId || !reviewId || !replyContent?.trim()) {
-      return res.status(400).json({ code: 400, message: "Thiếu thông tin phản hồi" });
-    }
+    if (
+  !productId ||
+  !reviewId ||
+  typeof replyContent !== "string" ||
+  !replyContent.trim()
+) {
+  return res.status(400).json({
+    code: 400,
+    message: "Vui l├▓ng nhß║¡p nß╗Öi dung phß║ún hß╗ôi.",
+  });
+}
+
+if (replyContent.trim().length > 1000) {
+  return res.status(400).json({
+    code: 400,
+    message: "Nß╗Öi dung phß║ún hß╗ôi kh├┤ng ─æ╞░ß╗úc v╞░ß╗út qu├í 1000 k├╜ tß╗▒.",
+  });
+}
 
     const product = await Product.findById(productId);
     if (!product) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm" });
+      return res.status(404).json({ code: 404, message: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m" });
     }
 
     const review = product.reviews.find((r) => String(r._id) === String(reviewId));
     if (!review) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy đánh giá" });
+      return res.status(404).json({ code: 404, message: "Kh├┤ng t├¼m thß║Ñy ─æ├ính gi├í" });
     }
 
     const now = new Date();
@@ -315,7 +436,7 @@ router.post(
     const populatedProduct = await Product.findById(product._id).populate("category");
     res.status(200).json({
       code: 200,
-      message: "Đã phản hồi đánh giá thành công",
+      message: "─É├ú phß║ún hß╗ôi ─æ├ính gi├í th├ánh c├┤ng",
       data: populatedProduct,
     });
   } catch (error) {
@@ -324,7 +445,7 @@ router.post(
   },
 );
 
-// GET /api/productsRouter/admin/reviews (Quản trị viên: Lấy danh sách đánh giá kèm bộ lọc sao & trạng thái phản hồi)
+// GET /api/productsRouter/admin/reviews (Quß║ún trß╗ï vi├¬n: Lß║Ñy danh s├ích ─æ├ính gi├í k├¿m bß╗Ö lß╗ìc sao & trß║íng th├íi phß║ún hß╗ôi)
 router.get(
   "/admin/reviews",
   authenticateToken,
@@ -339,18 +460,18 @@ router.get(
 
       const pipeline = [];
 
-      // 1. Lọc theo sản phẩm cụ thể nếu có
+      // 1. Lß╗ìc theo sß║ún phß║⌐m cß╗Ñ thß╗â nß║┐u c├│
       if (productId && mongoose.Types.ObjectId.isValid(productId)) {
         pipeline.push({ $match: { _id: new mongoose.Types.ObjectId(productId) } });
       }
 
-      // 2. Chỉ xét các sản phẩm có đánh giá
+      // 2. Chß╗ë x├⌐t c├íc sß║ún phß║⌐m c├│ ─æ├ính gi├í
       pipeline.push({ $match: { "reviews.0": { $exists: true } } });
 
-      // 3. Tách từng đánh giá thành bản ghi riêng biệt
+      // 3. T├ích tß╗½ng ─æ├ính gi├í th├ánh bß║ún ghi ri├¬ng biß╗çt
       pipeline.push({ $unwind: "$reviews" });
 
-      // 4. Lọc theo số sao đánh giá (1–5 sao hoặc khoảng 1-2 sao)
+      // 4. Lß╗ìc theo sß╗æ sao ─æ├ính gi├í (1ΓÇô5 sao hoß║╖c khoß║úng 1-2 sao)
       if (rating) {
         const ratingStr = String(rating).trim();
         if (ratingStr.includes("-")) {
@@ -371,7 +492,7 @@ router.get(
         }
       }
 
-      // 5. Lọc theo trạng thái phản hồi (đã trả lời / chưa trả lời)
+      // 5. Lß╗ìc theo trß║íng th├íi phß║ún hß╗ôi (─æ├ú trß║ú lß╗¥i / ch╞░a trß║ú lß╗¥i)
       if (replyStatus === "unanswered") {
         pipeline.push({
           $match: {
@@ -390,7 +511,7 @@ router.get(
         });
       }
 
-      // 6. Tìm kiếm theo tên khách, nội dung đánh giá hoặc tên sản phẩm
+      // 6. T├¼m kiß║┐m theo t├¬n kh├ích, nß╗Öi dung ─æ├ính gi├í hoß║╖c t├¬n sß║ún phß║⌐m
       if (search && String(search).trim()) {
         const searchRegex = new RegExp(String(search).trim(), "i");
         pipeline.push({
@@ -404,10 +525,10 @@ router.get(
         });
       }
 
-      // 7. Sắp xếp: đánh giá mới nhất lên đầu
+      // 7. Sß║»p xß║┐p: ─æ├ính gi├í mß╗¢i nhß║Ñt l├¬n ─æß║ºu
       pipeline.push({ $sort: { "reviews._id": -1 } });
 
-      // 8. Phân trang và chiếu dữ liệu
+      // 8. Ph├ón trang v├á chiß║┐u dß╗» liß╗çu
       pipeline.push({
         $facet: {
           data: [
@@ -441,7 +562,7 @@ router.get(
 
       res.status(200).json({
         code: 200,
-        message: "Lấy danh sách đánh giá thành công",
+        message: "Lß║Ñy danh s├ích ─æ├ính gi├í th├ánh c├┤ng",
         data: reviews,
         pagination: {
           totalReviews,
@@ -457,13 +578,166 @@ router.get(
 );
 
 
+router.put(
+  "/reply-review",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { productId, reviewId, replyContent } = req.body;
+
+      if (
+        !productId ||
+        !reviewId ||
+        typeof replyContent !== "string" ||
+        !replyContent.trim()
+      ) {
+        return res.status(400).json({
+          code: 400,
+          message: "Vui l├▓ng nhß║¡p nß╗Öi dung phß║ún hß╗ôi.",
+        });
+      }
+
+      const content = replyContent.trim();
+
+      if (content.length > 1000) {
+        return res.status(400).json({
+          code: 400,
+          message: "Nß╗Öi dung phß║ún hß╗ôi kh├┤ng ─æ╞░ß╗úc v╞░ß╗út qu├í 1000 k├╜ tß╗▒.",
+        });
+      }
+
+      const product = await Product.findById(productId);
+
+      if (!product) {
+        return res.status(404).json({
+          code: 404,
+          message: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m.",
+        });
+      }
+
+      const review = product.reviews.find(
+        (item) => String(item._id) === String(reviewId),
+      );
+
+      if (!review) {
+        return res.status(404).json({
+          code: 404,
+          message: "Kh├┤ng t├¼m thß║Ñy ─æ├ính gi├í.",
+        });
+      }
+
+      if (!String(review.replyContent || "").trim()) {
+        return res.status(400).json({
+          code: 400,
+          message: "─É├ính gi├í n├áy ch╞░a c├│ phß║ún hß╗ôi ─æß╗â chß╗ënh sß╗¡a.",
+        });
+      }
+
+      review.replyContent = content;
+
+      const now = new Date();
+      review.replyCreatedAt =
+        `${String(now.getDate()).padStart(2, "0")}/` +
+        `${String(now.getMonth() + 1).padStart(2, "0")}/` +
+        `${now.getFullYear()}`;
+
+      await product.save();
+
+      return res.status(200).json({
+        code: 200,
+        message: "Cß║¡p nhß║¡t phß║ún hß╗ôi th├ánh c├┤ng.",
+        data: {
+          productId: String(product._id),
+          reviewId: String(review._id),
+          replyContent: review.replyContent,
+          replyCreatedAt: review.replyCreatedAt,
+        },
+      });
+    } catch (error) {
+      console.error("[US26] Lß╗ùi cß║¡p nhß║¡t phß║ún hß╗ôi:", error);
+
+      return res.status(500).json({
+        code: 500,
+        message: "Kh├┤ng thß╗â cß║¡p nhß║¡t phß║ún hß╗ôi.",
+      });
+    }
+  },
+);
+
+router.delete(
+  "/reply-review",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { productId, reviewId } = req.body;
+
+      if (!productId || !reviewId) {
+        return res.status(400).json({
+          code: 400,
+          message: "Thiß║┐u th├┤ng tin sß║ún phß║⌐m hoß║╖c ─æ├ính gi├í.",
+        });
+      }
+
+      const product = await Product.findById(productId);
+
+      if (!product) {
+        return res.status(404).json({
+          code: 404,
+          message: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m.",
+        });
+      }
+
+      const review = product.reviews.find(
+        (item) => String(item._id) === String(reviewId),
+      );
+
+      if (!review) {
+        return res.status(404).json({
+          code: 404,
+          message: "Kh├┤ng t├¼m thß║Ñy ─æ├ính gi├í.",
+        });
+      }
+
+      if (!String(review.replyContent || "").trim()) {
+        return res.status(400).json({
+          code: 400,
+          message: "─É├ính gi├í n├áy ch╞░a c├│ phß║ún hß╗ôi ─æß╗â x├│a.",
+        });
+      }
+
+      review.replyContent = "";
+      review.replyCreatedAt = "";
+
+      await product.save();
+
+      return res.status(200).json({
+        code: 200,
+        message: "X├│a phß║ún hß╗ôi th├ánh c├┤ng.",
+        data: {
+          productId: String(product._id),
+          reviewId: String(review._id),
+        },
+      });
+    } catch (error) {
+      console.error("[US26] Lß╗ùi x├│a phß║ún hß╗ôi:", error);
+
+      return res.status(500).json({
+        code: 500,
+        message: "Kh├┤ng thß╗â x├│a phß║ún hß╗ôi.",
+      });
+    }
+  },
+);
+
 // GET all cart items
 router.get("/get-cart", authenticateToken, async (req, res) => {
   try {
     const cartItems = await Cart.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.status(200).json({
       code: 200,
-      message: "Lấy danh sách giỏ hàng thành công",
+      message: "Lß║Ñy danh s├ích giß╗Å h├áng th├ánh c├┤ng",
       data: cartItems,
     });
   } catch (error) {
@@ -478,14 +752,14 @@ router.post("/add-to-cart", authenticateToken, async (req, res) => {
     if (!productId) {
       return res
         .status(400)
-        .json({ code: 400, message: "Mã sản phẩm không hợp lệ" });
+        .json({ code: 400, message: "M├ú sß║ún phß║⌐m kh├┤ng hß╗úp lß╗ç" });
     }
 
     const product = await Product.findById(productId);
     if (!product) {
       return res
         .status(404)
-        .json({ code: 404, message: "Không tìm thấy sản phẩm" });
+        .json({ code: 404, message: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m" });
     }
 
     let colorName = "";
@@ -494,13 +768,13 @@ router.post("/add-to-cart", authenticateToken, async (req, res) => {
       const matchedColor = product.colors.find((c) => String(c._id) === String(colorId));
       if (matchedColor) {
         colorName = matchedColor.name;
-        colorHex = matchedColor.hex; // Lấy thêm mã màu Hex tương ứng
+        colorHex = matchedColor.hex; // Lß║Ñy th├¬m m├ú m├áu Hex t╞░╞íng ß╗⌐ng
       }
     }
 
     const qty = Number(quantity);
     if (!Number.isInteger(qty) || qty < 1) {
-      return res.status(400).json({ code: 400, message: "Số lượng không hợp lệ" });
+      return res.status(400).json({ code: 400, message: "Sß╗æ l╞░ß╗úng kh├┤ng hß╗úp lß╗ç" });
     }
 
     let existingCartItem = await Cart.findOne({
@@ -524,7 +798,7 @@ router.post("/add-to-cart", authenticateToken, async (req, res) => {
           (product.colors && product.colors.length > 0
             ? product.colors[0].name
             : ""),
-        // Lưu mã Hex tương ứng để hiển thị chấm màu ở Client (mặc định lấy màu đầu tiên nếu lỗi)
+        // L╞░u m├ú Hex t╞░╞íng ß╗⌐ng ─æß╗â hiß╗ân thß╗ï chß║Ñm m├áu ß╗ƒ Client (mß║╖c ─æß╗ïnh lß║Ñy m├áu ─æß║ºu ti├¬n nß║┐u lß╗ùi)
         colorHex:
           colorHex ||
           (product.colors && product.colors.length > 0
@@ -540,7 +814,7 @@ router.post("/add-to-cart", authenticateToken, async (req, res) => {
 
     res.status(200).json({
       code: 200,
-      message: "Đã thêm sản phẩm vào giỏ hàng",
+      message: "─É├ú th├¬m sß║ún phß║⌐m v├áo giß╗Å h├áng",
       data: allCartItems,
     });
   } catch (error) {
@@ -554,7 +828,7 @@ router.post("/update-cart-quantity", authenticateToken, async (req, res) => {
     const { cartItemId, quantity } = req.body;
     const qty = Number(quantity);
     if (!mongoose.isValidObjectId(cartItemId) || !Number.isInteger(qty) || qty < 0) {
-      return res.status(400).json({ code: 400, message: "Số lượng không hợp lệ" });
+      return res.status(400).json({ code: 400, message: "Sß╗æ l╞░ß╗úng kh├┤ng hß╗úp lß╗ç" });
     }
     let cartItem;
     if (qty <= 0) {
@@ -566,12 +840,12 @@ router.post("/update-cart-quantity", authenticateToken, async (req, res) => {
       );
     }
     if (!cartItem) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm trong giỏ hàng" });
+      return res.status(404).json({ code: 404, message: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m trong giß╗Å h├áng" });
     }
     const cartItems = await Cart.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.status(200).json({
       code: 200,
-      message: "Cập nhật số lượng thành công",
+      message: "Cß║¡p nhß║¡t sß╗æ l╞░ß╗úng th├ánh c├┤ng",
       data: cartItems,
     });
   } catch (error) {
@@ -583,16 +857,16 @@ router.post("/update-cart-quantity", authenticateToken, async (req, res) => {
 router.delete("/delete-cart-item/:id", authenticateToken, async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
-      return res.status(400).json({ code: 400, message: "Sản phẩm trong giỏ hàng không hợp lệ" });
+      return res.status(400).json({ code: 400, message: "Sß║ún phß║⌐m trong giß╗Å h├áng kh├┤ng hß╗úp lß╗ç" });
     }
     const cartItem = await Cart.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
     if (!cartItem) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm trong giỏ hàng" });
+      return res.status(404).json({ code: 404, message: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m trong giß╗Å h├áng" });
     }
     const cartItems = await Cart.find({ userId: req.user.id }).sort({ createdAt: -1 });
     res.status(200).json({
       code: 200,
-      message: "Xóa sản phẩm khỏi giỏ hàng thành công",
+      message: "X├│a sß║ún phß║⌐m khß╗Åi giß╗Å h├áng th├ánh c├┤ng",
       data: cartItems,
     });
   } catch (error) {
@@ -611,20 +885,20 @@ router.post("/add-product", authenticateToken, authorizeRoles(...ADMIN_ROLES), (
       if (!name || !price || !category || !req.file) {
         return res.status(400).json({
           code: 400,
-          message: "Tên, giá, danh mục và hình ảnh là bắt buộc",
+          message: "T├¬n, gi├í, danh mß╗Ñc v├á h├¼nh ß║únh l├á bß║»t buß╗Öc",
           data: null,
         });
       }
 
       if (isNaN(Number(price)) || Number(price) <= 0) {
-        return res.status(400).json({ code: 400, message: "Giá bán phải là số hợp lệ lớn hơn 0", data: null });
+        return res.status(400).json({ code: 400, message: "Gi├í b├ín phß║úi l├á sß╗æ hß╗úp lß╗ç lß╗¢n h╞ín 0", data: null });
       }
 
       if (isNaN(Number(stock)) || Number(stock) < 0) {
-        return res.status(400).json({ code: 400, message: "Số lượng tồn kho phải là số hợp lệ không âm", data: null });
+        return res.status(400).json({ code: 400, message: "Sß╗æ l╞░ß╗úng tß╗ôn kho phß║úi l├á sß╗æ hß╗úp lß╗ç kh├┤ng ├óm", data: null });
       }
 
-      // Phân giải danh mục từ name sang ID nếu client gửi text danh mục
+      // Ph├ón giß║úi danh mß╗Ñc tß╗½ name sang ID nß║┐u client gß╗¡i text danh mß╗Ñc
       let categoryId = category.trim();
       if (!mongoose.Types.ObjectId.isValid(categoryId)) {
         const cat = await Category.findOne({ name: categoryId });
@@ -658,7 +932,7 @@ router.post("/add-product", authenticateToken, authorizeRoles(...ADMIN_ROLES), (
       }
 
       const populatedProduct = await Product.findById(savedProduct._id).populate("category");
-      res.status(201).json({ code: 201, message: "Thêm sản phẩm thành công", data: populatedProduct });
+      res.status(201).json({ code: 201, message: "Th├¬m sß║ún phß║⌐m th├ánh c├┤ng", data: populatedProduct });
     } catch (error) {
       res.status(400).json({ code: 400, message: error.message, data: null });
     }
@@ -671,27 +945,27 @@ router.put("/update-product/:id", authenticateToken, authorizeRoles(...ADMIN_ROL
       return res.status(400).json({ code: 400, message: uploadError.message, data: null });
     }
     try {
-      // Kiểm tra sản phẩm tồn tại bằng truy vấn thô (tránh Mongoose ép kiểu lỗi trên bản ghi cũ)
+      // Kiß╗âm tra sß║ún phß║⌐m tß╗ôn tß║íi bß║▒ng truy vß║Ñn th├┤ (tr├ính Mongoose ├⌐p kiß╗âu lß╗ùi tr├¬n bß║ún ghi c┼⌐)
       const rawProduct = await Product.collection.findOne({ _id: new mongoose.Types.ObjectId(req.params.id) });
       if (!rawProduct) {
-        return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm", data: null });
+        return res.status(404).json({ code: 404, message: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m", data: null });
       }
 
       console.log("update-product body:", req.body);
       const { name, price, category, description, stock, colors, isActive, soldQuantity, rating } = req.body;
       if (!name || !price || !category) {
-        return res.status(400).json({ code: 400, message: "Thiếu thông tin sản phẩm", data: null });
+        return res.status(400).json({ code: 400, message: "Thiß║┐u th├┤ng tin sß║ún phß║⌐m", data: null });
       }
 
       if (isNaN(Number(price)) || Number(price) <= 0) {
-        return res.status(400).json({ code: 400, message: "Giá bán phải là số hợp lệ lớn hơn 0", data: null });
+        return res.status(400).json({ code: 400, message: "Gi├í b├ín phß║úi l├á sß╗æ hß╗úp lß╗ç lß╗¢n h╞ín 0", data: null });
       }
 
       if (stock !== undefined && (isNaN(Number(stock)) || Number(stock) < 0)) {
-        return res.status(400).json({ code: 400, message: "Số lượng tồn kho phải là số hợp lệ không âm", data: null });
+        return res.status(400).json({ code: 400, message: "Sß╗æ l╞░ß╗úng tß╗ôn kho phß║úi l├á sß╗æ hß╗úp lß╗ç kh├┤ng ├óm", data: null });
       }
 
-      // Phân giải danh mục từ name sang ID nếu client gửi tên danh mục
+      // Ph├ón giß║úi danh mß╗Ñc tß╗½ name sang ID nß║┐u client gß╗¡i t├¬n danh mß╗Ñc
       let categoryId = category.trim();
       if (!mongoose.Types.ObjectId.isValid(categoryId)) {
         const cat = await Category.findOne({ name: categoryId });
@@ -733,13 +1007,13 @@ router.put("/update-product/:id", authenticateToken, authorizeRoles(...ADMIN_ROL
         { returnDocument: 'after', runValidators: true }
       ).populate("category");
 
-      // Xóa cache tìm kiếm
+      // X├│a cache t├¼m kiß║┐m
       if (client?.isReady) {
         const keys = await client.keys("search:v3:*");
         if (keys.length > 0) await client.del(keys);
       }
 
-      res.json({ code: 200, message: "Cập nhật sản phẩm thành công", data: populatedProduct });
+      res.json({ code: 200, message: "Cß║¡p nhß║¡t sß║ún phß║⌐m th├ánh c├┤ng", data: populatedProduct });
     } catch (error) {
       res.status(400).json({ code: 400, message: error.message, data: null });
     }
@@ -757,7 +1031,7 @@ router.get("/search-product", async (req, res) => {
     const skip = (page - 1) * limit;
     const cacheKey = `search:v3:${keyword}:${category}:${page}:${limit}:${showInactive}:${sort}`;
 
-    // Check cache trước
+    // Check cache tr╞░ß╗¢c
     const cached = client?.isReady
       ? await client.get(cacheKey).catch(() => null)
       : null;
@@ -797,7 +1071,7 @@ router.get("/search-product", async (req, res) => {
       },
     };
 
-    // Cache 5 phút
+    // Cache 5 ph├║t
     if (client?.isReady) {
       await client.setEx(cacheKey, 300, JSON.stringify(result)).catch(() => {});
     }
@@ -822,11 +1096,11 @@ router.post("/shipping-quote", authenticateToken, async (req, res) => {
     res.status(200).json({
       success: true,
       code: 200,
-      message: "Tính phí vận chuyển thành công",
+      message: "T├¡nh ph├¡ vß║¡n chuyß╗ân th├ánh c├┤ng",
       data: {
         provider: provider || "GHN",
         service_id: 53320,
-        service_name: "Giao hàng tiêu chuẩn",
+        service_name: "Giao h├áng ti├¬u chuß║⌐n",
         shipping_fee: shippingFee,
         estimated_delivery: estimatedDelivery,
       },
@@ -841,7 +1115,7 @@ router.post("/shipping-quote", authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/productsRouter/checkout - Thanh toán giỏ hàng và tạo Đơn hàng
+// POST /api/productsRouter/checkout - Thanh to├ín giß╗Å h├áng v├á tß║ío ─É╞ín h├áng
 router.post("/checkout", authenticateToken, async (req, res) => {
   try {
     const cartItems = await Cart.find({ userId: req.user.id });
@@ -849,7 +1123,7 @@ router.post("/checkout", authenticateToken, async (req, res) => {
     if (cartItems.length === 0) {
       return res.status(400).json({
         code: 400,
-        message: "Giỏ hàng của bạn đang trống"
+        message: "Giß╗Å h├áng cß╗ºa bß║ín ─æang trß╗æng"
       });
     }
 
@@ -878,7 +1152,7 @@ router.post("/checkout", authenticateToken, async (req, res) => {
 
     const savedOrder = await newOrder.save();
 
-    // Cập nhật tồn kho và số lượng đã bán cho từng sản phẩm
+    // Cß║¡p nhß║¡t tß╗ôn kho v├á sß╗æ l╞░ß╗úng ─æ├ú b├ín cho tß╗½ng sß║ún phß║⌐m
     for (const item of cartItems) {
       await Product.findByIdAndUpdate(item.productId, {
         $inc: {
@@ -892,14 +1166,14 @@ router.post("/checkout", authenticateToken, async (req, res) => {
 
     res.status(200).json({
       code: 200,
-      message: "Thanh toán đơn hàng thành công!",
+      message: "Thanh to├ín ─æ╞ín h├áng th├ánh c├┤ng!",
       data: savedOrder
     });
   } catch (error) {
-    console.error("Lỗi khi thanh toán đơn hàng:", error);
+    console.error("Lß╗ùi khi thanh to├ín ─æ╞ín h├áng:", error);
     res.status(500).json({
       code: 500,
-      message: "Lỗi máy chủ khi thanh toán đơn hàng."
+      message: "Lß╗ùi m├íy chß╗º khi thanh to├ín ─æ╞ín h├áng."
     });
   }
 });
@@ -913,7 +1187,7 @@ router.post(
   try {
     const { name } = req.body;
     if (!name || !name.trim()) {
-      return res.status(400).json({ code: 400, message: "Tên danh mục là bắt buộc" });
+      return res.status(400).json({ code: 400, message: "T├¬n danh mß╗Ñc l├á bß║»t buß╗Öc" });
     }
 
     const cleanName = name.trim();
@@ -921,7 +1195,7 @@ router.post(
       name: { $regex: new RegExp("^" + cleanName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i") },
     });
     if (existingCategory) {
-      return res.status(400).json({ code: 400, message: "Danh mục đã tồn tại" });
+      return res.status(400).json({ code: 400, message: "Danh mß╗Ñc ─æ├ú tß╗ôn tß║íi" });
     }
 
     const newCategory = await Category.create({
@@ -929,10 +1203,10 @@ router.post(
       image,
     });
 
-    res.status(201).json({ code: 201, message: "Thêm danh mục thành công", data: newCategory });
+    res.status(201).json({ code: 201, message: "Th├¬m danh mß╗Ñc th├ánh c├┤ng", data: newCategory });
   } catch (error) {
     if (error.code === 11000) {
-      return res.status(400).json({ code: 400, message: "Danh mục đã tồn tại" });
+      return res.status(400).json({ code: 400, message: "Danh mß╗Ñc ─æ├ú tß╗ôn tß║íi" });
     }
     res.status(500).json({ code: 500, message: error.message });
   }
@@ -949,7 +1223,7 @@ router.put(
     const { name, isActive } = req.body;
     const category = await Category.findById(req.params.id);
     if (!category) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy danh mục" });
+      return res.status(404).json({ code: 404, message: "Kh├┤ng t├¼m thß║Ñy danh mß╗Ñc" });
     }
 
     if (name && name.trim()) {
@@ -959,7 +1233,7 @@ router.put(
         name: { $regex: new RegExp("^" + cleanName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$", "i") },
       });
       if (duplicateCategory) {
-        return res.status(400).json({ code: 400, message: "Tên danh mục đã tồn tại" });
+        return res.status(400).json({ code: 400, message: "T├¬n danh mß╗Ñc ─æ├ú tß╗ôn tß║íi" });
       }
       category.name = cleanName;
     }
@@ -967,10 +1241,10 @@ router.put(
     if (req.file) category.image = req.file.path;
 
     const updatedCategory = await category.save();
-    res.status(200).json({ code: 200, message: "Cập nhật danh mục thành công", data: updatedCategory });
+    res.status(200).json({ code: 200, message: "Cß║¡p nhß║¡t danh mß╗Ñc th├ánh c├┤ng", data: updatedCategory });
   } catch (error) {
     if (error.code === 11000) {
-      return res.status(400).json({ code: 400, message: "Tên danh mục đã tồn tại" });
+      return res.status(400).json({ code: 400, message: "T├¬n danh mß╗Ñc ─æ├ú tß╗ôn tß║íi" });
     }
     res.status(500).json({ code: 500, message: error.message });
   }
@@ -982,47 +1256,48 @@ router.delete("/delete-category/:id", authenticateToken, authorizeRoles(...ADMIN
   try {
     const category = await Category.findById(req.params.id);
     if (!category) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy danh mục" });
+      return res.status(404).json({ code: 404, message: "Kh├┤ng t├¼m thß║Ñy danh mß╗Ñc" });
     }
 
-    // Kiểm tra xem có sản phẩm nào thuộc danh mục này không
+    // Kiß╗âm tra xem c├│ sß║ún phß║⌐m n├áo thuß╗Öc danh mß╗Ñc n├áy kh├┤ng
     const hasProduct = await Product.exists({ category: req.params.id });
     if (hasProduct) {
-      return res.status(400).json({ code: 400, message: "Không thể xóa danh mục này vì có sản phẩm đang thuộc danh mục này" });
+      return res.status(400).json({ code: 400, message: "Kh├┤ng thß╗â x├│a danh mß╗Ñc n├áy v├¼ c├│ sß║ún phß║⌐m ─æang thuß╗Öc danh mß╗Ñc n├áy" });
     }
 
     await Category.findByIdAndDelete(req.params.id);
-    res.status(200).json({ code: 200, message: "Xóa danh mục thành công" });
+    res.status(200).json({ code: 200, message: "X├│a danh mß╗Ñc th├ánh c├┤ng" });
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message });
   }
 });
 
 // DELETE product (Only Superadmin has right to delete/deactivate products)
-router.delete("/delete-product/:id", authenticateToken, authorizeRoles("superadmin", "quản trị viên tối cao"), async (req, res) => {
+router.delete("/delete-product/:id", authenticateToken, authorizeRoles("superadmin", "quß║ún trß╗ï vi├¬n tß╗æi cao"), async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product) {
-      return res.status(404).json({ code: 404, message: "Không tìm thấy sản phẩm" });
+      return res.status(404).json({ code: 404, message: "Kh├┤ng t├¼m thß║Ñy sß║ún phß║⌐m" });
     }
 
-    // Thực hiện xóa cứng sản phẩm khỏi Database
+    // Thß╗▒c hiß╗çn x├│a cß╗⌐ng sß║ún phß║⌐m khß╗Åi Database
     await Product.findByIdAndDelete(req.params.id);
 
-    // Dọn dẹp cache tìm kiếm an toàn (tránh lỗi nghẽn/timeout trên môi trường Serverless)
+    // Dß╗ìn dß║╣p cache t├¼m kiß║┐m an to├án (tr├ính lß╗ùi nghß║╜n/timeout tr├¬n m├┤i tr╞░ß╗¥ng Serverless)
     try {
       if (client?.isReady) {
         const keys = await client.keys("search:v3:*");
         if (keys.length > 0) await client.del(keys);
       }
     } catch (redisError) {
-      console.error("Lỗi xóa cache Redis khi xóa sản phẩm:", redisError);
+      console.error("Lß╗ùi x├│a cache Redis khi x├│a sß║ún phß║⌐m:", redisError);
     }
 
-    res.status(200).json({ code: 200, message: "Xóa sản phẩm thành công" });
+    res.status(200).json({ code: 200, message: "X├│a sß║ún phß║⌐m th├ánh c├┤ng" });
   } catch (error) {
     res.status(500).json({ code: 500, message: error.message });
   }
 });
 
 module.exports = router;
+
