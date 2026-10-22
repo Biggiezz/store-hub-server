@@ -238,7 +238,7 @@
     <div class="sh-brand">
       <div class="sh-logo">SH</div>
       <div class="sh-title">
-        <h1>StoreHub RESTful API <span class="sh-version">v1.1.0</span></h1>
+        <h1>StoreHub RESTful API <span class="sh-version">v1.2.0</span></h1>
         <p>Hệ thống quản lý bán hàng đa kênh (Android App, Admin Web, Node.js Backend)</p>
       </div>
     </div>
@@ -283,7 +283,7 @@
       openapi: "3.0.3",
       info: {
         title: "StoreHub API Documentation",
-        version: "1.1.0",
+        version: "1.2.0",
         description: `
 ### 📖 Giới thiệu hệ sinh thái StoreHub
 Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) của hệ thống **StoreHub** (bao gồm Server Node.js/Express kết nối MongoDB Atlas, Cloudinary và ZaloPay).
@@ -291,6 +291,10 @@ Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) 
 #### 🛡️ Hướng dẫn xác thực (Authentication):
 - Các API có biểu tượng 🔒 ổ khóa yêu cầu **JWT Bearer Token**.
 - Hãy gọi API \`POST /users/login\` để nhận **token**, sau đó nhấn nút **Authorize** ở góc phải hoặc nút **🔑 Nhập Token Nhanh** ở trên cùng để lưu token một lần cho toàn bộ trang.
+
+#### 🌟 Điểm mới trong phiên bản v1.2.0 (Product Reviews & Customer Satisfaction - US28):
+- ⭐ **API Quản trị Đánh giá (\`GET /api/productsRouter/admin/reviews\`)**: Lọc đánh giá sản phẩm theo số sao (1–5 sao hoặc khoảng 1–2 sao), lọc theo trạng thái phản hồi (\`unanswered\`, \`answered\`, \`all\`), tìm kiếm và phân trang.
+- 💬 **Phản hồi đánh giá (\`POST /api/productsRouter/reply-review\`)**: Cho phép Quản trị viên phản hồi công khai các khiếu nại, nhận xét của khách hàng.
 
 #### 🌟 Điểm mới trong phiên bản v1.1.0 (Customer Loyalty & VIP Rewards):
 - 💎 **Lọc khách hàng thân thiết**: theo ngưỡng chi tiêu (\`minSpent\`) hoặc số đơn hoàn tất (\`minOrders\`).
@@ -1082,6 +1086,105 @@ Tài liệu cung cấp đầy đủ thông tin về các đầu API (Endpoints) 
             },
             responses: {
               201: { description: "Đánh giá thành công" }
+            }
+          }
+        },
+
+        "/api/productsRouter/admin/reviews": {
+          get: {
+            tags: ["3. Products & Categories"],
+            summary: "Admin: Lấy danh sách đánh giá sản phẩm (lọc sao 1-5, trạng thái phản hồi)",
+            description: "Dành riêng cho Quản trị viên theo dõi và kiểm duyệt đánh giá của khách hàng.",
+            security: [{ BearerAuth: [] }],
+            parameters: [
+              {
+                name: "rating",
+                in: "query",
+                description: "Lọc theo số sao (1, 2, 3, 4, 5 hoặc khoảng 1-2)",
+                required: false,
+                schema: { type: "string", example: "5" }
+              },
+              {
+                name: "replyStatus",
+                in: "query",
+                description: "Trạng thái phản hồi: unanswered (chưa phản hồi) | answered (đã phản hồi) | all",
+                required: false,
+                schema: { type: "string", enum: ["unanswered", "answered", "all"], example: "unanswered" }
+              },
+              {
+                name: "productId",
+                in: "query",
+                description: "ID sản phẩm cần lọc",
+                required: false,
+                schema: { type: "string" }
+              },
+              {
+                name: "search",
+                in: "query",
+                description: "Tìm kiếm theo tên khách, nội dung hoặc tên sản phẩm",
+                required: false,
+                schema: { type: "string" }
+              },
+              {
+                name: "page",
+                in: "query",
+                description: "Trang hiện tại (mặc định 1)",
+                required: false,
+                schema: { type: "integer", default: 1 }
+              },
+              {
+                name: "limit",
+                in: "query",
+                description: "Số lượng bản ghi mỗi trang (mặc định 10)",
+                required: false,
+                schema: { type: "integer", default: 10 }
+              }
+            ],
+            responses: {
+              200: {
+                description: "Lấy danh sách đánh giá thành công",
+                content: {
+                  "application/json": {
+                    schema: {
+                      type: "object",
+                      properties: {
+                        code: { type: "integer", example: 200 },
+                        message: { type: "string" },
+                        data: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              _id: { type: "string" },
+                              reviewId: { type: "string" },
+                              productId: { type: "string" },
+                              productName: { type: "string" },
+                              productImage: { type: "string" },
+                              customerName: { type: "string" },
+                              customerImage: { type: "string" },
+                              rating: { type: "number", example: 5 },
+                              content: { type: "string" },
+                              media: { type: "array", items: { type: "string" } },
+                              createdAt: { type: "string" },
+                              replyContent: { type: "string" },
+                              replyCreatedAt: { type: "string" }
+                            }
+                          }
+                        },
+                        pagination: {
+                          type: "object",
+                          properties: {
+                            totalReviews: { type: "integer" },
+                            currentPage: { type: "integer" },
+                            totalPages: { type: "integer" },
+                            limit: { type: "integer" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
           }
         },

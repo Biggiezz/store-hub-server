@@ -324,6 +324,139 @@ router.post(
   },
 );
 
+// GET /api/productsRouter/admin/reviews (Quản trị viên: Lấy danh sách đánh giá kèm bộ lọc sao & trạng thái phản hồi)
+router.get(
+  "/admin/reviews",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const page = Math.max(1, parseInt(req.query.page) || 1);
+      const limit = Math.max(1, parseInt(req.query.limit) || 10);
+      const skip = (page - 1) * limit;
+
+      const { rating, replyStatus, productId, search } = req.query;
+
+      const pipeline = [];
+
+      // 1. Lọc theo sản phẩm cụ thể nếu có
+      if (productId && mongoose.Types.ObjectId.isValid(productId)) {
+        pipeline.push({ $match: { _id: new mongoose.Types.ObjectId(productId) } });
+      }
+
+      // 2. Chỉ xét các sản phẩm có đánh giá
+      pipeline.push({ $match: { "reviews.0": { $exists: true } } });
+
+      // 3. Tách từng đánh giá thành bản ghi riêng biệt
+      pipeline.push({ $unwind: "$reviews" });
+
+      // 4. Lọc theo số sao đánh giá (1–5 sao hoặc khoảng 1-2 sao)
+      if (rating) {
+        const ratingStr = String(rating).trim();
+        if (ratingStr.includes("-")) {
+          const [min, max] = ratingStr.split("-").map(Number);
+          if (!isNaN(min) && !isNaN(max)) {
+            pipeline.push({ $match: { "reviews.rating": { $gte: min, $lte: max } } });
+          }
+        } else if (ratingStr.includes(",")) {
+          const ratings = ratingStr.split(",").map(Number).filter((n) => !isNaN(n));
+          if (ratings.length > 0) {
+            pipeline.push({ $match: { "reviews.rating": { $in: ratings } } });
+          }
+        } else {
+          const numRating = Number(ratingStr);
+          if (!isNaN(numRating)) {
+            pipeline.push({ $match: { "reviews.rating": numRating } });
+          }
+        }
+      }
+
+      // 5. Lọc theo trạng thái phản hồi (đã trả lời / chưa trả lời)
+      if (replyStatus === "unanswered") {
+        pipeline.push({
+          $match: {
+            $or: [
+              { "reviews.replyContent": { $exists: false } },
+              { "reviews.replyContent": "" },
+              { "reviews.replyContent": null },
+            ],
+          },
+        });
+      } else if (replyStatus === "answered") {
+        pipeline.push({
+          $match: {
+            "reviews.replyContent": { $exists: true, $nin: ["", null] },
+          },
+        });
+      }
+
+      // 6. Tìm kiếm theo tên khách, nội dung đánh giá hoặc tên sản phẩm
+      if (search && String(search).trim()) {
+        const searchRegex = new RegExp(String(search).trim(), "i");
+        pipeline.push({
+          $match: {
+            $or: [
+              { "reviews.customerName": searchRegex },
+              { "reviews.content": searchRegex },
+              { name: searchRegex },
+            ],
+          },
+        });
+      }
+
+      // 7. Sắp xếp: đánh giá mới nhất lên đầu
+      pipeline.push({ $sort: { "reviews._id": -1 } });
+
+      // 8. Phân trang và chiếu dữ liệu
+      pipeline.push({
+        $facet: {
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $project: {
+                _id: "$reviews._id",
+                reviewId: "$reviews._id",
+                productId: "$_id",
+                productName: "$name",
+                productImage: "$image",
+                customerName: "$reviews.customerName",
+                customerImage: "$reviews.customerImage",
+                rating: "$reviews.rating",
+                content: "$reviews.content",
+                media: "$reviews.media",
+                createdAt: "$reviews.createdAt",
+                replyContent: "$reviews.replyContent",
+                replyCreatedAt: "$reviews.replyCreatedAt",
+              },
+            },
+          ],
+          totalCount: [{ $count: "count" }],
+        },
+      });
+
+      const result = await Product.aggregate(pipeline);
+      const reviews = result[0]?.data || [];
+      const totalReviews = result[0]?.totalCount[0]?.count || 0;
+
+      res.status(200).json({
+        code: 200,
+        message: "Lấy danh sách đánh giá thành công",
+        data: reviews,
+        pagination: {
+          totalReviews,
+          currentPage: page,
+          totalPages: Math.ceil(totalReviews / limit) || 1,
+          limit,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ code: 500, message: error.message, data: [] });
+    }
+  },
+);
+
+
 // GET all cart items
 router.get("/get-cart", authenticateToken, async (req, res) => {
   try {
