@@ -200,6 +200,112 @@ const uploadReview = multer({
   limits: { fileSize: 30 * 1024 * 1024 }, // Giới hạn 30MB
 });
 
+/**
+ * US25: Danh sách đánh giá sản phẩm dành cho quản trị viên.
+ * GET /api/productsRouter/admin-reviews?rating=5&status=unreplied
+ */
+router.get(
+  "/admin-reviews",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const ratingParam = String(req.query.rating || "all");
+      const status = String(req.query.status || "all");
+
+      if (
+        ratingParam !== "all" &&
+        !["1", "2", "3", "4", "5"].includes(ratingParam)
+      ) {
+        return res.status(400).json({
+          code: 400,
+          message: "Bộ lọc số sao không hợp lệ.",
+        });
+      }
+
+      if (!["all", "replied", "unreplied"].includes(status)) {
+        return res.status(400).json({
+          code: 400,
+          message: "Bộ lọc trạng thái phản hồi không hợp lệ.",
+        });
+      }
+
+      const products = await Product.find(
+        { "reviews.0": { $exists: true } },
+        { name: 1, reviews: 1 },
+      ).lean();
+
+      const reviews = [];
+
+      for (const product of products) {
+        for (const review of product.reviews || []) {
+          const rating = Number(review.rating || 0);
+          const replyContent = String(review.replyContent || "").trim();
+          const replied = replyContent.length > 0;
+
+          if (ratingParam !== "all" && rating !== Number(ratingParam)) {
+            continue;
+          }
+
+          if (status === "replied" && !replied) continue;
+          if (status === "unreplied" && replied) continue;
+
+          reviews.push({
+            _id: String(review._id),
+            productId: String(product._id),
+            productName: product.name || "Sản phẩm không xác định",
+            customerName: review.customerName || "Khách hàng",
+            rating,
+            content: review.content || "",
+            createdAt: review.createdAt || "",
+            replyContent,
+            replyCreatedAt: review.replyCreatedAt || "",
+            status: replied ? "replied" : "unreplied",
+          });
+        }
+      }
+
+      const parseReviewDate = (value) => {
+        if (!value) return 0;
+
+        const dateText = String(value);
+        const vnDate = dateText.match(
+          /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/,
+        );
+
+        if (vnDate) {
+          return new Date(
+            Number(vnDate[3]),
+            Number(vnDate[2]) - 1,
+            Number(vnDate[1]),
+          ).getTime();
+        }
+
+        const timestamp = new Date(dateText).getTime();
+        return Number.isNaN(timestamp) ? 0 : timestamp;
+      };
+
+      reviews.sort(
+        (a, b) => parseReviewDate(b.createdAt) - parseReviewDate(a.createdAt),
+      );
+
+      return res.status(200).json({
+        code: 200,
+        message: "Lấy danh sách đánh giá thành công.",
+        data: reviews,
+        total: reviews.length,
+      });
+    } catch (error) {
+      console.error("[US25] Lỗi lấy danh sách đánh giá:", error);
+
+      return res.status(500).json({
+        code: 500,
+        message: "Không thể lấy danh sách đánh giá.",
+      });
+    }
+  },
+);
+
 // POST add a product review
 router.post("/add-review", authenticateToken, (req, res) => {
   uploadReview.array("media", 5)(req, res, async (uploadError) => {
@@ -291,9 +397,24 @@ router.post(
   async (req, res) => {
   try {
     const { productId, reviewId, replyContent } = req.body;
-    if (!productId || !reviewId || !replyContent?.trim()) {
-      return res.status(400).json({ code: 400, message: "Thiếu thông tin phản hồi" });
-    }
+    if (
+  !productId ||
+  !reviewId ||
+  typeof replyContent !== "string" ||
+  !replyContent.trim()
+) {
+  return res.status(400).json({
+    code: 400,
+    message: "Vui lòng nhập nội dung phản hồi.",
+  });
+}
+
+if (replyContent.trim().length > 1000) {
+  return res.status(400).json({
+    code: 400,
+    message: "Nội dung phản hồi không được vượt quá 1000 ký tự.",
+  });
+}
 
     const product = await Product.findById(productId);
     if (!product) {
@@ -323,6 +444,162 @@ router.post(
   }
   },
 );
+
+
+router.put(
+  "/reply-review",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { productId, reviewId, replyContent } = req.body;
+
+      if (
+        !productId ||
+        !reviewId ||
+        typeof replyContent !== "string" ||
+        !replyContent.trim()
+      ) {
+        return res.status(400).json({
+          code: 400,
+          message: "Vui lòng nhập nội dung phản hồi.",
+        });
+      }
+
+      const content = replyContent.trim();
+
+      if (content.length > 1000) {
+        return res.status(400).json({
+          code: 400,
+          message: "Nội dung phản hồi không được vượt quá 1000 ký tự.",
+        });
+      }
+
+      const product = await Product.findById(productId);
+
+      if (!product) {
+        return res.status(404).json({
+          code: 404,
+          message: "Không tìm thấy sản phẩm.",
+        });
+      }
+
+      const review = product.reviews.find(
+        (item) => String(item._id) === String(reviewId),
+      );
+
+      if (!review) {
+        return res.status(404).json({
+          code: 404,
+          message: "Không tìm thấy đánh giá.",
+        });
+      }
+
+      if (!String(review.replyContent || "").trim()) {
+        return res.status(400).json({
+          code: 400,
+          message: "Đánh giá này chưa có phản hồi để chỉnh sửa.",
+        });
+      }
+
+      review.replyContent = content;
+
+      const now = new Date();
+      review.replyCreatedAt =
+        `${String(now.getDate()).padStart(2, "0")}/` +
+        `${String(now.getMonth() + 1).padStart(2, "0")}/` +
+        `${now.getFullYear()}`;
+
+      await product.save();
+
+      return res.status(200).json({
+        code: 200,
+        message: "Cập nhật phản hồi thành công.",
+        data: {
+          productId: String(product._id),
+          reviewId: String(review._id),
+          replyContent: review.replyContent,
+          replyCreatedAt: review.replyCreatedAt,
+        },
+      });
+    } catch (error) {
+      console.error("[US26] Lỗi cập nhật phản hồi:", error);
+
+      return res.status(500).json({
+        code: 500,
+        message: "Không thể cập nhật phản hồi.",
+      });
+    }
+  },
+);
+
+
+router.delete(
+  "/reply-review",
+  authenticateToken,
+  authorizeRoles(...ADMIN_ROLES),
+  async (req, res) => {
+    try {
+      const { productId, reviewId } = req.body;
+
+      if (!productId || !reviewId) {
+        return res.status(400).json({
+          code: 400,
+          message: "Thiếu thông tin sản phẩm hoặc đánh giá.",
+        });
+      }
+
+      const product = await Product.findById(productId);
+
+      if (!product) {
+        return res.status(404).json({
+          code: 404,
+          message: "Không tìm thấy sản phẩm.",
+        });
+      }
+
+      const review = product.reviews.find(
+        (item) => String(item._id) === String(reviewId),
+      );
+
+      if (!review) {
+        return res.status(404).json({
+          code: 404,
+          message: "Không tìm thấy đánh giá.",
+        });
+      }
+
+      if (!String(review.replyContent || "").trim()) {
+        return res.status(400).json({
+          code: 400,
+          message: "Đánh giá này chưa có phản hồi để xóa.",
+        });
+      }
+
+      review.replyContent = "";
+      review.replyCreatedAt = "";
+
+      await product.save();
+
+      return res.status(200).json({
+        code: 200,
+        message: "Xóa phản hồi thành công.",
+        data: {
+          productId: String(product._id),
+          reviewId: String(review._id),
+        },
+      });
+    } catch (error) {
+      console.error("[US26] Lỗi xóa phản hồi:", error);
+
+      return res.status(500).json({
+        code: 500,
+        message: "Không thể xóa phản hồi.",
+      });
+    }
+  },
+);
+
 
 // GET all cart items
 router.get("/get-cart", authenticateToken, async (req, res) => {
