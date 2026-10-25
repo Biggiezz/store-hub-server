@@ -134,11 +134,17 @@ function getStatusTimestamp(status) {
   return {};
 }
 
+const ZALOPAY_CONFIG = {
+  appId: Number(process.env.ZALOPAY_APP_ID) || 2554,
+  key1: process.env.ZALOPAY_KEY1 || "sdngKKJmqEMzvh5QQcdD2A9XBSKUNaYn",
+  key2: process.env.ZALOPAY_KEY2 || "trMrHtvjo6myautxDUiAcYsVtaeQ8nhf",
+};
+
 // Hàm truy vấn trạng thái đơn hàng của ZaloPay
 function queryZaloPayOrder(appTransId) {
   return new Promise((resolve, reject) => {
-    const appId = 2553;
-    const key1 = "PcY4iZIKFCIdgZvA6ueMcMHHUbRLYjPL";
+    const appId = ZALOPAY_CONFIG.appId;
+    const key1 = ZALOPAY_CONFIG.key1;
     const dataToMac = `${appId}|${appTransId}|${key1}`;
     const mac = crypto.createHmac("sha256", key1).update(dataToMac).digest("hex");
 
@@ -184,17 +190,17 @@ function queryZaloPayOrder(appTransId) {
 // - description: Lý do hoàn tiền (hiển thị trên ứng dụng ví ZaloPay của khách hàng)
 function refundZaloPay(zpTransId, amount, description) {
   return new Promise((resolve, reject) => {
-    const appId = 2553; // AppId môi trường thử nghiệm (Sandbox) của ZaloPay
+    const appId = ZALOPAY_CONFIG.appId;
     
     // Key1: Khóa bảo mật dùng để ký chữ ký MAC khi gửi các yêu cầu tạo giao dịch/hoàn tiền lên ZaloPay.
-    const key1 = "PcY4iZIKFCIdgZvA6ueMcMHHUbRLYjPL"; 
+    const key1 = ZALOPAY_CONFIG.key1; 
     
     const timestamp = Date.now();
     
     // m_refund_id: Mã định danh duy nhất cho mỗi yêu cầu hoàn tiền.
     // Định dạng bắt buộc của ZaloPay: yymmdd_appid_uniqueid (Độ dài tối đa 40 ký tự).
     const yymmdd = new Date().toISOString().slice(2, 10).replace(/-/g, "");
-    const mRefundId = `${yymmdd}_2553_${timestamp}`;
+    const mRefundId = `${yymmdd}_${appId}_${timestamp}`;
     
     // Tạo chuỗi data để tính MAC: app_id|zp_trans_id|amount|description|timestamp
     const dataToMac = `${appId}|${zpTransId}|${amount}|${description}|${timestamp}`;
@@ -273,8 +279,8 @@ router.post("/create-zalopay-order", authenticateToken, async (req, res) => {
       return res.status(400).json({ code: 400, message: "Thiếu số tiền cần thanh toán" });
     }
 
-    const appId = 2553;
-    const key1 = "PcY4iZIKFCIdgZvA6ueMcMHHUbRLYjPL";
+    const appId = ZALOPAY_CONFIG.appId;
+    const key1 = ZALOPAY_CONFIG.key1;
     const appTransId = getAppTransId();
     const appTime = Date.now();
     const embedData = "{}";
